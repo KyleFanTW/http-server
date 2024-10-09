@@ -16,6 +16,12 @@ int main(int argc , char *argv[]){
     struct sockaddr_in addr;
     char buffer[BUFF_SIZE] = {};
 
+    // Parse the arguments
+    if(argc != 3 && argc != 4){
+        fprintf(stderr, "Usage: ./client [host] [port] [username:password]\n");
+        return -1;
+    }
+
     // Get socket file descriptor
     if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
         ERR_EXIT("socket()");

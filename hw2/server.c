@@ -16,6 +16,13 @@ int main(int argc, char *argv[]){
     int client_addr_len = sizeof(client_addr);
     char *message = "Hello World!";
 
+    // parse the arguments  The program server takes exactly one argument, port. Otherwise, it should output Usage: ./server [port] to stderr and immediately terminate the program with return code-1, as shown in Listing 3.
+    if(argc != 2){
+        fprintf(stderr, "Usage: ./server [port]\n");
+        return -1;
+    }
+    // if the port is not a number, 
+
     // Get socket file descriptor
     if((listenfd = socket(AF_INET , SOCK_STREAM , 0)) < 0){
         ERR_EXIT("socket()");
