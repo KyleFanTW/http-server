@@ -31,12 +31,24 @@ bool authenticate(const char *auth_header) {
     if (encoded[strlen(encoded) - 1] == '\n') {
         encoded[strlen(encoded) - 1] = '\0';
     }
+    //add padding if needed
+    if (strlen(encoded) % 4 != 0) {
+        int padding = 4 - (strlen(encoded) % 4);
+        for (int i = 0; i < padding; i++) {
+            strcat(encoded, "=");
+        }
+    }
 
     // Decoding base64 (simplified, use a proper base64 decoding library in real applications)
-    char decoded[64];
     size_t decoded_len;
     unsigned char *decoded_bytes = base64_decode(encoded, strlen(encoded), &decoded_len);
-    decoded[decoded_len] = '\0';
+    char *decoded = (char *)malloc(decoded_len + 1);  // +1 for null terminator
+    if (decoded_bytes) {
+        memcpy(decoded, decoded_bytes, decoded_len);
+        decoded[decoded_len] = '\0';  // Null-terminate the decoded string
+    }
+    free(decoded_bytes);
+
 
     // Check credentials against a stored username:password
     fprintf(stderr, "Decoded: %s\n", decoded);
@@ -122,6 +134,7 @@ int main(int argc, char *argv[]) {
         if (bytes_received < 0) {
             ERR_EXIT("recv()");
         }
+
         buffer[bytes_received] = '\0';
         char *auth_header = strstr(buffer, "Authorization: ");
         fprintf(stderr, "Received request: %s\n", buffer);
@@ -155,7 +168,64 @@ int main(int argc, char *argv[]) {
 
                 close(file_fd);
             }
-        } else {
+        } else if (strstr(buffer, "GET /upload/file") != NULL) {
+            // Read secret.html file
+            int file_fd = open("./web/uploadf.html", O_RDONLY);
+            if (file_fd < 0) {
+                // Send 404 Not Found response if the file can't be opened
+                char *not_found_response = "HTTP/1.1 404 Not Found\r\nContent-Length: 13\r\n\r\n404 Not Found";
+                send(connfd, not_found_response, strlen(not_found_response), 0);
+            } else {
+                // Send 200 OK response with the content of secret.html
+                char *header = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
+                send(connfd, header, strlen(header), 0);
+                
+                int read_bytes;
+                while ((read_bytes = read(file_fd, buffer, sizeof(buffer))) > 0) {
+                    send(connfd, buffer, read_bytes, 0);
+                }
+
+                close(file_fd);
+            }
+        } else if (strstr(buffer, "GET /upload/video") != NULL) {
+            // Read secret.html file
+            int file_fd = open("./web/uploadv.html", O_RDONLY);
+            if (file_fd < 0) {
+                // Send 404 Not Found response if the file can't be opened
+                char *not_found_response = "HTTP/1.1 404 Not Found\r\nContent-Length: 13\r\n\r\n404 Not Found";
+                send(connfd, not_found_response, strlen(not_found_response), 0);
+            } else {
+                // Send 200 OK response with the content of secret.html
+                char *header = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
+                send(connfd, header, strlen(header), 0);
+                
+                int read_bytes;
+                while ((read_bytes = read(file_fd, buffer, sizeof(buffer))) > 0) {
+                    send(connfd, buffer, read_bytes, 0);
+                }
+
+                close(file_fd);
+            }
+        }  else if (strstr(buffer, "GET /file/") != NULL) {
+            // Read secret.html file
+            int file_fd = open("./web/listf.rhtml", O_RDONLY);
+            if (file_fd < 0) {
+                // Send 404 Not Found response if the file can't be opened
+                char *not_found_response = "HTTP/1.1 404 Not Found\r\nContent-Length: 13\r\n\r\n404 Not Found";
+                send(connfd, not_found_response, strlen(not_found_response), 0);
+            } else {
+                // Send 200 OK response with the content of secret.html
+                char *header = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
+                send(connfd, header, strlen(header), 0);
+                
+                int read_bytes;
+                while ((read_bytes = read(file_fd, buffer, sizeof(buffer))) > 0) {
+                    send(connfd, buffer, read_bytes, 0);
+                }
+
+                close(file_fd);
+            }
+        }else {
             // Send 405 Method Not Allowed response for unsupported routes
             char *method_not_allowed_response = "HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\n\r\n";
             send(connfd, method_not_allowed_response, strlen(method_not_allowed_response), 0);
