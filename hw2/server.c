@@ -12,6 +12,8 @@
 #include <sys/types.h>
 #include <ctype.h>
 #include <poll.h>
+#include <sys/stat.h>
+#include <signal.h>
 
 
 #define MAX_CONNECTIONS 100
@@ -147,6 +149,7 @@ int main(int argc, char *argv[]) {
     int client_addr_len = sizeof(client_addr);
     struct pollfd poll_fds[MAX_CONNECTIONS];
     int nfds = 1;  // Start with 1, for the listening socket
+    signal(SIGPIPE, SIG_IGN); //CHECK THIS
     if (argc != 2) {
         fprintf(stderr, "Usage: ./server [port]\n");
         return -1;
@@ -280,6 +283,98 @@ int main(int argc, char *argv[]) {
 
                         close(file_fd);
                     }
+                } else if (strstr(buffer, " /api/file") != NULL) {
+                    if (strstr(buffer, "/api/file/") == NULL) {
+                        //this is for /api/file, the upload part
+                        if (strstr(buffer, "POST /api/file") == NULL) {
+                            send(connfd, ERROR4050, strlen(ERROR4050), 0);
+                            fprintf(stderr, "[SYS] Send 405 Method Not Allowed for /api/file, it should be POST\n");
+                            continue;
+                        }
+                        if (auth == false){
+                            send(connfd, ERROR401, strlen(ERROR401), 0);
+                            fprintf(stderr, "[SYS] Send 401 Unauthorized for /api/file\n");
+                            continue;
+                        }
+                        // start uoploading file
+                        fprintf(stderr, "[SYS] Start uploading file - TODO\n");
+                    }
+                    else {
+                        //this is for /api/file/<filename>, the display part
+                        if (strstr(buffer, "GET /api/file/") == NULL) {
+                            send(connfd, ERROR4051, strlen(ERROR4051), 0);
+                            fprintf(stderr, "[SYS] Send 405 Method Not Allowed for /api/file/<filename>, it should be GET\n");
+                            continue;
+                        }
+                        //get the filename by decoding the url
+                        //strategy: find the first / after /api/file/, then cut the string after that
+                        char *filename = strstr(buffer, "/api/file/") + strlen("/api/file/");
+                        char *end = strchr(filename, ' ');
+                        if (end) {
+                            *end = '\0';
+                        }
+                        filename = url_decode(filename);
+                        fprintf(stderr, "[SYS] Requested file: %s\n", filename);
+                        //open the file
+                        char file_path[256];
+                        snprintf(file_path, sizeof(file_path), "./web/files/%s", filename);
+                        int file_fd = open(file_path, O_RDONLY);
+                        if (file_fd < 0) {
+                            send(connfd, ERROR404, strlen(ERROR404), 0);
+                            fprintf(stderr, "[SYS] Send 404 due to file not found for /api/file/%s\n", filename);
+                        } else {
+                            // Determine the file size using stat
+                            struct stat file_stat;
+                            if (fstat(file_fd, &file_stat) < 0) {
+                                send(connfd, ERROR500, strlen(ERROR500), 0);
+                                close(file_fd);
+                                fprintf(stderr, "[SYS] Send 500 Internal Server Error due to stat failure\n");
+                                return;
+                            }
+                            int file_size = file_stat.st_size;
+                            char *extension = strrchr(filename, '.');
+                            char *content_type;
+                            
+                            if (strcmp(extension, ".html") == 0 || strcmp(extension, ".rhtml") == 0) {
+                                    content_type = "text/html";
+                            } else if (strcmp(extension, ".mp4") == 0 || strcmp(extension, ".m4v") == 0) {
+                                content_type = "video/mp4";
+                            } else if (strcmp(extension, ".m4s") == 0) {
+                                content_type = "video/iso.segment";
+                            } else if (strcmp(extension, ".m4a") == 0) {
+                                content_type = "audio/mp4";
+                            } else if (strcmp(extension, ".mpd") == 0) {
+                                content_type = "application/dash+xml";
+                            } else {
+                                content_type = "text/plain";
+                            }
+
+                            // Prepare and send the HTTP header once
+                            char header[1024];
+                            snprintf(header, sizeof(header), "HTTP/1.1 200 OK\r\n"
+                                                            "Server: CN2023Server/1.0\r\n"
+                                                            "Content-Type: %s\r\n"
+                                                            "Content-Length: %d\r\n\r\n", 
+                                                            content_type, file_size);
+                            send(connfd, header, strlen(header), 0);
+                            fprintf(stderr, "[SYS] Send 200 OK for /api/file/%s\n", filename);
+
+                            // Now send the file content in chunks
+                            int read_bytes;
+                            while ((read_bytes = read(file_fd, buffer, sizeof(buffer))) > 0) {
+                                int sent_bytes = send(connfd, buffer, read_bytes, MSG_NOSIGNAL); // Use MSG_NOSIGNAL
+                                if (sent_bytes < 0) {
+                                    fprintf(stderr, "[SYS] Send failed for /api/file/%s\n", filename);
+                                    break;
+                                }
+                            }
+                            fprintf(stderr, "[SYS] Sent file %s for /api/file/%s\n", filename, filename);
+
+                            // Close the file descriptor after reading is complete
+                            close(file_fd);
+                        }
+                    }
+                    
                 } else if (strstr(buffer, " /upload/file") != NULL) {
                     if (strstr(buffer, "GET /upload/file") == NULL) {
                         send(connfd, ERROR4051, strlen(ERROR4051), 0);
@@ -377,7 +472,7 @@ int main(int argc, char *argv[]) {
                                 char *encoded_name = url_encode(entry->d_name);  // Encode the file name
 
                                 char row[256];
-                                snprintf(row, sizeof(row), "<tr><td><a href=\"/file/%s\">%s</a></td></tr>\n", encoded_name, entry->d_name);
+                                snprintf(row, sizeof(row), "<tr><td><a href=\"/api/file/%s\">%s</a></td></tr>\n", encoded_name, entry->d_name);
                                 strcat(files_list, row);  // Append the row to the file_list
 
                                 free(encoded_name);  // Free the encoded name
