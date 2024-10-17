@@ -21,11 +21,11 @@
 #define ERR_EXIT(a) { perror(a); exit(1); }
 
 
-#define ERROR401 "HTTP/1.1 401 Unauthorized\r\nServer: CN2023Server/1.0\r\nWWW-Authenticate: Basic realm=\"B11902050\"\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nUnauthorized\n"
-#define ERROR404 "HTTP/1.1 404 Not Found\r\nServer: CN2023Server/1.0\r\nContent-Type: text/plain\r\nContent-Length: 10\r\n\r\nNot Found\n"
-#define ERROR4051 "HTTP/1.1 405 Method Not Allowed\r\nServer: CN2023Server/1.0\r\nAllow: GET\r\nContent-Length: 0\r\n\r\n"
-#define ERROR4050 "HTTP/1.1 405 Method Not Allowed\r\nServer: CN2023Server/1.0\r\nAllow: POST\r\nContent-Length: 0\r\n\r\n"
-#define ERROR500 " HTTP/1.1 500 Internal Server Error\r\nServer: CN2023Server/1.0\r\nContent-Length: 0\r\n\r\n"
+#define ERROR401 "HTTP/1.1 401 Unauthorized\r\nServer: CN2024Server/1.0\r\nWWW-Authenticate: Basic realm=\"B11902050\"\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nUnauthorized\n"
+#define ERROR404 "HTTP/1.1 404 Not Found\r\nServer: CN2024Server/1.0\r\nContent-Type: text/plain\r\nContent-Length: 10\r\n\r\nNot Found\n"
+#define ERROR4051 "HTTP/1.1 405 Method Not Allowed\r\nServer: CN2024Server/1.0\r\nAllow: GET\r\nContent-Length: 0\r\n\r\n"
+#define ERROR4050 "HTTP/1.1 405 Method Not Allowed\r\nServer: CN2024Server/1.0\r\nAllow: POST\r\nContent-Length: 0\r\n\r\n"
+#define ERROR500 " HTTP/1.1 500 Internal Server Error\r\nServer: CN2024Server/1.0\r\nContent-Length: 0\r\n\r\n"
 
 
 
@@ -98,7 +98,7 @@ bool authenticate(const char *auth_header) {
             return false;
         }
     }
-    fprintf(stderr, "Encoded: %s\n", encoded);
+    
     //strip off the trailing \n
     if (encoded[strlen(encoded) - 1] == '\n') {
         encoded[strlen(encoded) - 1] = '\0';
@@ -132,7 +132,7 @@ bool authenticate(const char *auth_header) {
         //fprintf(stderr, "Checking user: %s\n", line);
         //fprintf(stderr, "Checking password: %s\n", decoded);
         if (strcmp(line, decoded) == 0) {
-            fprintf(stderr, "Authenticated user: %s\n", decoded);
+            fprintf(stderr, "[AUTH] Authenticated for user: %s\n", line);
             fclose(file);
             return true;
         }
@@ -155,10 +155,6 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    if (atoi(argv[1]) < 1024 || atoi(argv[1]) > 65535) {
-        fprintf(stderr, "Port number out of range\n");
-        return -1;
-    }
 
     int port = atoi(argv[1]);
     // Create listening socket
@@ -206,7 +202,7 @@ int main(int argc, char *argv[]) {
                 continue;
             }
 
-            printf("New connection accepted: fd %d\n", connfd);
+            fprintf(stderr, "[CON] New connection: fd %d\n", connfd);
 
             // Add new connection to the poll_fds array
             if (nfds < MAX_CONNECTIONS) {
@@ -237,7 +233,7 @@ int main(int argc, char *argv[]) {
                 } else {
                     buffer[bytes_received] = '\0';
                     keep_alive = should_keep_alive(buffer);
-                    fprintf(stderr, "Keep alive: %d\n", keep_alive);
+                    fprintf(stderr, "[CON] Checked and found connfd %d request is keep-alive: %d\n", poll_fds[i].fd, keep_alive);
                     
                     if (bytes_received < 0) {
                         ERR_EXIT("recv()");
@@ -270,11 +266,11 @@ int main(int argc, char *argv[]) {
                     } else {
                         int read_bytes;
                         while ((read_bytes = read(file_fd, buffer, sizeof(buffer))) > 0) {
-                            int response_length = strlen("HTTP/1.1 200 OK\r\nServer: CN2023Server/1.0\r\n") + strlen("Content-Type: text/html\r\n\r\n") +
+                            int response_length = strlen("HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\n") + strlen("Content-Type: text/html\r\n\r\n") +
                                 strlen("Content-Length: ") + snprintf(NULL, 0, "%d", read_bytes) +
                                 strlen("\r\n\r\n") + strlen(buffer) + 1;
                             char *response = (char *)malloc(response_length);
-                            snprintf(response, response_length, "HTTP/1.1 200 OK\r\nServer: CN2023Server/1.0\r\nContent-Type: text/html\r\nContent-Length: %d\r\n\r\n%s", read_bytes, buffer);
+                            snprintf(response, response_length, "HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\nContent-Type: text/html\r\nContent-Length: %d\r\n\r\n%s", read_bytes, buffer);
                             send(connfd, response, response_length, 0);
                             free(response);
                         }
@@ -352,7 +348,7 @@ int main(int argc, char *argv[]) {
                             // Prepare and send the HTTP header once
                             char header[1024];
                             snprintf(header, sizeof(header), "HTTP/1.1 200 OK\r\n"
-                                                            "Server: CN2023Server/1.0\r\n"
+                                                            "Server: CN2024Server/1.0\r\n"
                                                             "Content-Type: %s\r\n"
                                                             "Content-Length: %d\r\n\r\n", 
                                                             content_type, file_size);
@@ -393,11 +389,11 @@ int main(int argc, char *argv[]) {
                     } else {
                         int read_bytes;
                         while ((read_bytes = read(file_fd, buffer, sizeof(buffer))) > 0) {
-                            int response_length = strlen("HTTP/1.1 200 OK\r\nServer: CN2023Server/1.0\r\n") + strlen("Content-Type: text/html\r\n\r\n") +
+                            int response_length = strlen("HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\n") + strlen("Content-Type: text/html\r\n\r\n") +
                                 strlen("Content-Length: ") + snprintf(NULL, 0, "%d", read_bytes) +
                                 strlen("\r\n\r\n") + strlen(buffer) + 1;
                             char *response = (char *)malloc(response_length);
-                            snprintf(response, response_length, "HTTP/1.1 200 OK\r\nServer: CN2023Server/1.0\r\nContent-Type: text/html\r\nContent-Length: %d\r\n\r\n%s", read_bytes, buffer);
+                            snprintf(response, response_length, "HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\nContent-Type: text/html\r\nContent-Length: %d\r\n\r\n%s", read_bytes, buffer);
                             send(connfd, response, response_length, 0);
                             free(response);
                         }
@@ -425,11 +421,11 @@ int main(int argc, char *argv[]) {
                     } else {
                         int read_bytes;
                         while ((read_bytes = read(file_fd, buffer, sizeof(buffer))) > 0) {
-                            int response_length = strlen("HTTP/1.1 200 OK\r\nServer: CN2023Server/1.0\r\n") + strlen("Content-Type: text/html\r\n\r\n") +
+                            int response_length = strlen("HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\n") + strlen("Content-Type: text/html\r\n\r\n") +
                                 strlen("Content-Length: ") + snprintf(NULL, 0, "%d", read_bytes) +
                                 strlen("\r\n\r\n") + strlen(buffer) + 1;
                             char *response = (char *)malloc(response_length);
-                            snprintf(response, response_length, "HTTP/1.1 200 OK\r\nServer: CN2023Server/1.0\r\nContent-Type: text/html\r\nContent-Length: %d\r\n\r\n%s", read_bytes, buffer);
+                            snprintf(response, response_length, "HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\nContent-Type: text/html\r\nContent-Length: %d\r\n\r\n%s", read_bytes, buffer);
                             send(connfd, response, response_length, 0);
                             free(response);
                         }
@@ -489,10 +485,10 @@ int main(int argc, char *argv[]) {
                                 strcat(final_content, files_list);
                                 strcat(final_content, placeholder + strlen("<?FILE_LIST?>"));
 
-                                int response_length = strlen("HTTP/1.1 200 OK\r\nServer: CN2023Server/1.0\r\n") + strlen("Content-Type: text/html\r\n\r\n") +
+                                int response_length = strlen("HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\n") + strlen("Content-Type: text/html\r\n\r\n") +
                                         strlen("Content-Length: ") + snprintf(NULL, 0, "%ld", strlen(final_content)) + strlen("\r\n\r\n") + strlen(final_content) + 1;
                                 char *response = (char *)malloc(response_length);
-                                snprintf(response, response_length, "HTTP/1.1 200 OK\r\nServer: CN2023Server/1.0\r\nContent-Type: text/html\r\nContent-Length: %ld\r\n\r\n%s", strlen(final_content), final_content);
+                                snprintf(response, response_length, "HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\nContent-Type: text/html\r\nContent-Length: %ld\r\n\r\n%s", strlen(final_content), final_content);
                                 send(connfd, response, response_length, 0);
                                 free(response);
                                 fprintf(stderr, "[SYS] Send 200 OK for /file/\n");
@@ -557,10 +553,10 @@ int main(int argc, char *argv[]) {
                                 strcat(final_content, placeholder + strlen("<?VIDEO_LIST?>"));  // Append the content after the placeholder
 
                                 // Send the final content to the client
-                                int response_length = strlen("HTTP/1.1 200 OK\r\nServer: CN2023Server/1.0\r\n") + strlen("Content-Type: text/html\r\n\r\n") +
+                                int response_length = strlen("HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\n") + strlen("Content-Type: text/html\r\n\r\n") +
                                         strlen("Content-Length: ") + snprintf(NULL, 0, "%ld", strlen(final_content)) + strlen("\r\n\r\n") + strlen(final_content) + 1;
                                 char *response = (char *)malloc(response_length);
-                                snprintf(response, response_length, "HTTP/1.1 200 OK\r\nServer: CN2023Server/1.0\r\nContent-Type: text/html\r\nContent-Length: %ld\r\n\r\n%s", strlen(final_content), final_content);
+                                snprintf(response, response_length, "HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\nContent-Type: text/html\r\nContent-Length: %ld\r\n\r\n%s", strlen(final_content), final_content);
                                 send(connfd, response, response_length, 0);
                                 free(response);
                                 
@@ -582,7 +578,7 @@ int main(int argc, char *argv[]) {
                 }
 
                 if (!keep_alive) {
-                        printf("Closing connection due to Connection: close, fd: %d\n", poll_fds[i].fd);
+                        fprintf(stderr, "[CON] Closing connection: fd %d due to Connection: close\n", poll_fds[i].fd);
                         close(poll_fds[i].fd);
                         poll_fds[i] = poll_fds[nfds - 1];  // Remove from poll set
                         nfds--;
