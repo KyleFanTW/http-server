@@ -6,3 +6,6 @@ hw2/files
 server
 client
 .vscode
+
+servernew.c
+servertmp.c
