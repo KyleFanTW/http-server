@@ -9,3 +9,4 @@ client
 
 servernew.c
 servertmp.c
+upload.c
