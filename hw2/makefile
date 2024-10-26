@@ -4,7 +4,7 @@ all: server client
 server: server.c
 	gcc -Wall -pthread -o server server.c ./utils/base64.c
 client: client.c
-	gcc -Wall -o client client.c
+	gcc -Wall -o client client.c ./utils/base64.c
 
 clean:
 	@rm -rf server client 
