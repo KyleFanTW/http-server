@@ -80,7 +80,7 @@ void receive_http_get_response(int sockfd, char *filename) {
         fwrite(filebuffer, 1, content_length, file);
         fclose(file);
         free(filebuffer);
-        
+
 
 
         
@@ -109,16 +109,16 @@ int main(int argc, char *argv[]) {
             line[strcspn(line, "\n")] = '\0';  // Remove newline character
             if (strcmp(line, username_password) == 0) {
                 auth = true;
-                fprintf(stderr, "[AUTH] Authenticated for user: %s\n", line);
+                //fprintf(stderr, "[AUTH] Authenticated for user: %s\n", line);
                 // Encode the username and password
                 size_t encoded_length;
                 char *encoded = base64_encode((const unsigned char *)username_password, strlen(username_password), &encoded_length);
                 if (encoded == NULL) {
-                    fprintf(stderr, "Failed to encode credentials.\n");
+                    //fprintf(stderr, "Failed to encode credentials.\n");
                     return -1;
                 }
                 snprintf(auth_header, sizeof(auth_header), "Authorization: Basic %s", encoded);
-                fprintf(stderr, "[AUTH] Auth header: %s\n", auth_header);
+                //fprintf(stderr, "[AUTH] Auth header: %s\n", auth_header);
                 free(encoded);
                 break;
             }
@@ -141,7 +141,7 @@ int main(int argc, char *argv[]) {
         ERR_EXIT("gethostbyname()");
     }
     char *ip = inet_ntoa(*((struct in_addr*)host->h_addr_list[0]));
-    fprintf(stderr, "[CON] Connecting to %s:%s\n", ip, argv[2]);
+    //fprintf(stderr, "[CON] Connecting to %s:%s\n", ip, argv[2]);
 
     // Set server address
     bzero(&addr, sizeof(addr));
