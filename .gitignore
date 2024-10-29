@@ -12,3 +12,5 @@ servertmp.c
 upload.c
 
 secret
+
+testdata

@@ -105,7 +105,8 @@ bool parseData(char *buffer, int buffer_length, int connfd, int video) {
     boundary[boundary_start - buffer] = '\0';
     fprintf(stderr, "[PARSER] Boundary: %s\n", boundary);
     char boundary_end[256];
-    snprintf(boundary_end, sizeof(boundary_end), "\r\n--", boundary);
+    snprintf(boundary_end, sizeof(boundary_end), "\r\n%s", boundary);
+
 
     // Find the filename
     char *filename_start = strstr(buffer, "filename=\"");
@@ -229,7 +230,7 @@ char *url_decode(const char *str) {
 
 
 bool authenticate(const char *auth_header) {
-    fprintf(stderr, "Auth header: %s\n", auth_header);
+    fprintf(stderr, "[AUTH] Auth header: %s\n", auth_header);
     if (!auth_header) return false;
     char encoded[512];
     sscanf(auth_header, "Authorization: Basic %s", encoded);
@@ -259,6 +260,7 @@ bool authenticate(const char *auth_header) {
     }
     free(decoded_bytes);
     FILE *file = fopen("./secret", "r");
+    fprintf(stderr, "[AUTH] Opened secret file\n");
     char line[64];
     while (fgets(line, sizeof(line), file)) {
         line[strcspn(line, "\n")] = '\0';  // Remove newline character
@@ -706,7 +708,7 @@ int main(int argc, char *argv[]) {
                                 if (file_content_start) {
                                     file_content_start += 4; // Move past "\r\n\r\n"
                                     int file_content_length = bytes_received - (file_content_start - buffer);
-                                    fprintf(stderr, "[MAIN - Vid Uploads] File content length: %d\n", file_content_length);
+                                    fprintf(stderr, "[MAIN - File Uploads] File content length: %d\n", file_content_length);
                                     memcpy(request, file_content_start, file_content_length);
                                     total_received += file_content_length;
                                 }
@@ -724,7 +726,7 @@ int main(int argc, char *argv[]) {
                                     total_received += received;
                                 }
                                 fprintf(stderr, "[MAIN - File Uploads] Parsing request buffer\n");
-                                fprintf(stderr, "[MAIN - File Uploads] DATA-----\n %s\n-----\n", request);
+                                fprintf(stderr, "[MAIN - File Uploads] ===DATA========\n%s\n============\n", request);
                                 if (parseData(request, content_length, connfd, 0)) {
                                     fprintf(stderr, "[MAIN - File Uploads] File uploaded successfully\n");
                                     //response 200 OK

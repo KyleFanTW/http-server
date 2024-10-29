@@ -6,7 +6,8 @@ char *base64_encode(const unsigned char *data,
 
     *output_length = 4 * ((input_length + 2) / 3);
 
-    char *encoded_data = (char *)malloc(*output_length);
+    // Allocate extra byte for the NULL terminator
+    char *encoded_data = (char *)malloc(*output_length + 1);
     if (encoded_data == NULL) return NULL;
 
     for (int i = 0, j = 0; i < input_length;) {
@@ -25,6 +26,9 @@ char *base64_encode(const unsigned char *data,
 
     for (int i = 0; i < mod_table[input_length % 3]; i++)
         encoded_data[*output_length - 1 - i] = '=';
+
+    // Add NULL terminator
+    encoded_data[*output_length] = '\0';
 
     return encoded_data;
 }

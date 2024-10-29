@@ -55,7 +55,7 @@ void receive_http_get_response(int sockfd, char *filename) {
         fprintf(stderr, "Command failed.\n");
     }
     else {
-        fprintf(stderr, "Command successful.\n");
+        fprintf(stderr, "Command succeeded.\n");
         //parse content length
         char *content_length_start = strstr(buffer, "Content-Length: ") + strlen("Content-Length: ");
         char *content_length_end = strstr(content_length_start, "\r\n");
@@ -132,6 +132,8 @@ int main(int argc, char *argv[]) {
         // Check if the username and password are valid using secret.txt
         size_t encoded_length;
         char *username_password = argv[3];
+        username_password[strlen(username_password)] = '\0';
+        fprintf(stderr, "[MAIN - AUTH] Username:Password: %s\n", username_password);
         char *encoded = base64_encode((const unsigned char *)username_password, strlen(username_password), &encoded_length);
         if (encoded == NULL) {
             //fprintf(stderr, "Failed to encode credentials.\n");
@@ -173,7 +175,8 @@ int main(int argc, char *argv[]) {
         if (strncmp(buffer, "put ", 4) == 0) {
             // Upload file to /api/file
             char filename[128];
-            sscanf(buffer, "put %s", filename);
+            sscanf(buffer, "put %[^\n]", filename);
+
             fprintf(stderr, "[PUT] Uploading file: %s\n", filename);
             FILE *file = fopen(filename, "rb");
             if (!file) {
@@ -229,7 +232,7 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Request: %s\n", buffer);
             free(file_buffer);
 
-            (receive_http_response(sockfd))? fprintf(stderr, "Command successful.\n") : fprintf(stderr, "Command failed.\n");
+            (receive_http_response(sockfd))? fprintf(stderr, "Command succeeded.\n") : fprintf(stderr, "Command failed.\n");
 
         } else if (strncmp(buffer, "putv ", 5) == 0) {
             // Upload video to /api/video
@@ -290,7 +293,7 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Request: %s\n", buffer);
             free(file_buffer);
 
-            (receive_http_response(sockfd))? fprintf(stderr, "Command successful.\n") : fprintf(stderr, "Command failed.\n");
+            (receive_http_response(sockfd))? fprintf(stderr, "Command succeeded.\n") : fprintf(stderr, "Command failed.\n");
         } else if (strncmp(buffer, "get ", 4) == 0) {
             // Download file from /api/file/{filepath}
             char filename[128];
