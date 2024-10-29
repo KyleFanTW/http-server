@@ -268,7 +268,22 @@ int main(int argc, char *argv[]) {
                 // fprintf(stderr, "Request: %s\n", buffer);
                 free(file_buffer);
 
-                (receive_http_response(sockfd))? fprintf(stderr, "Command succeeded.\n") : fprintf(stderr, "Command failed.\n");
+                //(receive_http_response(sockfd))? fprintf(stderr, "Command succeeded.\n") : fprintf(stderr, "Command failed.\n");
+                char buffer2[BUFF_SIZE];
+                ssize_t n;
+                if ((n = recv(sockfd, buffer2, sizeof(buffer2) - 1, 0)) < 0) {
+                    ERR_EXIT("recv()");
+                }
+                buffer2[n] = '\0';
+                //alternate all \n to " "
+                for (int i = 0; i < strlen(buffer2); i++) {
+                    if (buffer2[i] == '\n') {
+                        buffer2[i] = ' ';
+                    }
+                }
+                buffer2[n] = '\0';
+                fprintf(stderr, "Response: %s\n", buffer2);
+
             }
 
         } else if (strncmp(buffer, "putv ", 5) == 0) {
