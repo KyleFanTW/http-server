@@ -25,7 +25,7 @@ int receive_http_response(int sockfd) {
         ERR_EXIT("recv()");
     }
     buffer[n] = '\0';
-    printf("%s\n", buffer);
+    //printf("%s\n", buffer);
     
     //if 401 unauthorized return 401
     if (strstr(buffer, "401 Unauthorized") != NULL) {
@@ -115,7 +115,7 @@ int main(int argc, char *argv[]) {
         ERR_EXIT("gethostbyname()");
     }
     char *ip = inet_ntoa(*((struct in_addr*)host->h_addr_list[0]));
-    fprintf(stderr, "[CON] Connecting to %s:%s\n", ip, argv[2]);
+    //fprintf(stderr, "[CON] Connecting to %s:%s\n", ip, argv[2]);
 
     // Set server address
     bzero(&addr, sizeof(addr));
@@ -133,14 +133,14 @@ int main(int argc, char *argv[]) {
         size_t encoded_length;
         char *username_password = argv[3];
         username_password[strlen(username_password)] = '\0';
-        fprintf(stderr, "[MAIN - AUTH] Username:Password: %s\n", username_password);
+        //fprintf(stderr, "[MAIN - AUTH] Username:Password: %s\n", username_password);
         char *encoded = base64_encode((const unsigned char *)username_password, strlen(username_password), &encoded_length);
         if (encoded == NULL) {
             //fprintf(stderr, "Failed to encode credentials.\n");
             return -1;
         }
         snprintf(auth_header, sizeof(auth_header), "Authorization: Basic %s", encoded);
-        fprintf(stderr, "[MAIN - AUTH] Auth header: %s\n", auth_header);
+        //fprintf(stderr, "[MAIN - AUTH] Auth header: %s\n", auth_header);
         free(encoded);
         //Try to authenticate with the server
         snprintf(buffer, sizeof(buffer), "GET /upload/file HTTP/1.1\r\n"

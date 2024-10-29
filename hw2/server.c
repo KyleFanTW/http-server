@@ -324,7 +324,7 @@ bool sendPage(int connfd, char *filename, int dynamic) {
             DIR *dir = (video == 0) ? opendir("./web/files") : opendir("./web/videos");
             if (!dir) {
                 send(connfd, ERROR404, strlen(ERROR404), 0);
-                fprintf(stderr, "[PAGE] Send 404 due to file not found for /file/\n");
+                fprintf(stderr, "[PAGE] Send 404 due to file not found for /file/ or /video/\n");
             } else {
                 struct dirent *entry;
                 char files_list[4096] = "";
