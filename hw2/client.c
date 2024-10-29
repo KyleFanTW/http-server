@@ -7,6 +7,7 @@
 #include<unistd.h>
 #include<fcntl.h>
 #include<stdbool.h>
+#include<signal.h>
 #include"utils/base64.h"
 
 #define BUFF_SIZE 2048
@@ -28,16 +29,13 @@ int receive_http_response(int sockfd) {
     //printf("%s\n", buffer);
     
     //if 401 unauthorized return 401
-    if (strstr(buffer, "401 Unauthorized") != NULL) {
-        return 401;
-    }
-    else if (strstr(buffer, "200 OK") == NULL) {
+    if (strstr(buffer, "200 OK") != NULL) {
         // fprintf(stderr, "[RCV] Command failed.\n");
-        return 0;
+        return 1;
     }
     else {
         // fprintf(stderr, "[RCV] Command successful.\n");
-        return 1;
+        return 0;
     }
 }
 
@@ -88,12 +86,38 @@ void receive_http_get_response(int sockfd, char *filename) {
     }
 }
 
+
+int establish_connection(const char *host_ip, int port) {
+    int sockfd;
+    struct sockaddr_in addr;
+
+    // Create socket
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        ERR_EXIT("socket()");
+    }
+
+    // Set server address
+    bzero(&addr, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = inet_addr(host_ip);
+    addr.sin_port = htons(port);
+
+    // Connect to the server
+    if (connect(sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        close(sockfd);
+        ERR_EXIT("connect()");
+    }
+
+    return sockfd;
+}
+
 int main(int argc, char *argv[]) {
     int sockfd;
     struct sockaddr_in addr;
     char buffer[BUFF_SIZE] = {};
     bool auth = false;
     char auth_header[512] = {};
+    signal(SIGPIPE, SIG_IGN);
 
     // Parse the arguments
     if (argc != 3 && argc != 4) {
@@ -153,7 +177,7 @@ int main(int argc, char *argv[]) {
 
         send_http_request(sockfd, buffer);
         int response = receive_http_response(sockfd);
-        if (response == 401) {
+        if (response == 0) {
             fprintf(stderr, "Invalid user or wrong password.\n");
             return -1; //CHECK THIS
         }
@@ -169,7 +193,11 @@ int main(int argc, char *argv[]) {
         if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
             break;
         }
-        buffer[strcspn(buffer, "\n")] = '\0';  // Remove newline character
+        buffer[strcspn(buffer, "\n")] = '\0';  
+
+        close(sockfd);
+        sockfd = establish_connection(ip, atoi(argv[2]));
+
         if (strcmp(buffer, "put") == 0) {
             fprintf(stderr, "Usage: put [file]\n");
         } else if (strcmp(buffer, "putv") == 0) {
