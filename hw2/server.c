@@ -658,9 +658,62 @@ int main(int argc, char *argv[]) {
                     else auth = true;
                 
                     char method[16], url[256];
+                    char *request;
                     sscanf(buffer, "%s %s", method, url);
                     fprintf(stderr, "[MAIN - REQ PARSE] URL: .%s.\n", url);
                     fprintf(stderr, "[MAIN - REQ PARSE] Method: .%s.\n", method);
+
+
+                    int content_length = 0;
+                    
+                    //find the boundary
+                    char boundary[256];
+                    if (strstr(buffer, "Content-Type: multipart/form-data") == NULL) {
+                        fprintf(stderr, "[MAIN - Full Req] No file upload\n");
+                    }
+                    else {
+                        sscanf(strstr(buffer, "Content-Length: ") + strlen("Content-Length: "), "%d", &content_length);
+                        fprintf(stderr, "[MAIN - Full Req] Content-Length: %d\n", content_length);
+                        char *boundary_start = strstr(buffer, "boundary=") + strlen("boundary=");
+                        char *boundary_end = strchr(boundary_start, '\r');
+                        strncpy(boundary, boundary_start, boundary_end - boundary_start);
+                        boundary[boundary_end - boundary_start] = '\0';
+                        fprintf(stderr, "[MAIN - Full Req] Boundary: %s\n", boundary);
+                        //malloc a binary buffer to store the whole request
+                        request = (char *)malloc(content_length + 1);
+                        fprintf(stderr, "[MAIN - Full Req] Setting up request buffer\n");
+                        int total_received = 0;
+                        //find the start of the file content
+                        char *file_content_start = strstr(buffer, "\r\n\r\n");
+                        fprintf(stderr, "[MAIN - Full Req] File content start is located\n");
+                        fprintf(stderr, "[MAIN - Full Req] File content start: %s\n", file_content_start);
+                        if (file_content_start) {
+                            file_content_start += 4; // Move past "\r\n\r\n"
+                            int file_content_length = bytes_received - (file_content_start - buffer);
+                            fprintf(stderr, "[MAIN - Full Req] File content length: %d\n", file_content_length);
+                            memcpy(request, file_content_start, file_content_length);
+                            total_received += file_content_length;
+                        }
+                        
+                        
+                        while (total_received < content_length) {
+                            int bytes_to_read = content_length - total_received;
+                            fprintf(stderr, "[MAIN - Full Req] Bytes to read: %d\n", bytes_to_read);
+                            int received = recv(connfd, request + total_received, bytes_to_read, 0);
+                            if (received <= 0) {
+                                perror("recv failed");
+                                free(request);
+                                return false;
+                            }
+                            total_received += received;
+                        }
+                        fprintf(stderr, "[MAIN - Full Req] Parsing request buffer\n");
+                        fprintf(stderr, "[MAIN - Full Req] ===DATA========\n%s\n============\n", request);
+                    }
+
+                    
+                    
+                    
                 
                     // Check if the request is for "/"
                     if (strcmp(url, "/") == 0) {
@@ -685,48 +738,7 @@ int main(int argc, char *argv[]) {
                                     fprintf(stderr, "[MAIN - File Uploads] Send 401 Unauthorized for /api/file\n");
                                     continue;
                                 }
-                                fprintf(stderr, "[MAIN - File Uploads] Uploading: %s\n", buffer);
-                                int content_length = 0;
-                                sscanf(strstr(buffer, "Content-Length: ") + strlen("Content-Length: "), "%d", &content_length);
-                                fprintf(stderr, "[MAIN - File Uploads] Content-Length: %d\n", content_length);
-                                //find the boundary
-                                char boundary[256];
-                                char *boundary_start = strstr(buffer, "boundary=") + strlen("boundary=");
-                                char *boundary_end = strchr(boundary_start, '\r');
-                                strncpy(boundary, boundary_start, boundary_end - boundary_start);
-                                boundary[boundary_end - boundary_start] = '\0';
-                                fprintf(stderr, "[MAIN - File Uploads] Boundary: %s\n", boundary);
-                                //malloc a binary buffer to store the whole request
-                                char *request = (char *)malloc(content_length + 1);
-                                fprintf(stderr, "[MAIN - File Uploads] Setting up request buffer\n");
                                 
-                                int total_received = 0;
-                                //find the start of the file content
-                                char *file_content_start = strstr(buffer, "\r\n\r\n");
-                                fprintf(stderr, "[MAIN - File Uploads] File content start is located\n");
-                                fprintf(stderr, "[MAIN - File Uploads] File content start: %s\n", file_content_start);
-                                if (file_content_start) {
-                                    file_content_start += 4; // Move past "\r\n\r\n"
-                                    int file_content_length = bytes_received - (file_content_start - buffer);
-                                    fprintf(stderr, "[MAIN - File Uploads] File content length: %d\n", file_content_length);
-                                    memcpy(request, file_content_start, file_content_length);
-                                    total_received += file_content_length;
-                                }
-                                
-                                
-                                while (total_received < content_length) {
-                                    int bytes_to_read = content_length - total_received;
-                                    fprintf(stderr, "[MAIN - File Uploads] Bytes to read: %d\n", bytes_to_read);
-                                    int received = recv(connfd, request + total_received, bytes_to_read, 0);
-                                    if (received <= 0) {
-                                        perror("recv failed");
-                                        free(request);
-                                        return false;
-                                    }
-                                    total_received += received;
-                                }
-                                fprintf(stderr, "[MAIN - File Uploads] Parsing request buffer\n");
-                                fprintf(stderr, "[MAIN - File Uploads] ===DATA========\n%s\n============\n", request);
                                 if (parseData(request, content_length, connfd, 0)) {
                                     fprintf(stderr, "[MAIN - File Uploads] File uploaded successfully\n");
                                     //response 200 OK
@@ -763,48 +775,7 @@ int main(int argc, char *argv[]) {
                                     fprintf(stderr, "[MAIN - Vid Uploads] Send 401 Unauthorized for /api/video\n");
                                     continue;
                                 }
-                                int content_length = 0;
-                                sscanf(strstr(buffer, "Content-Length: ") + strlen("Content-Length: "), "%d", &content_length);
-                                fprintf(stderr, "[MAIN - Vid Uploads] Content-Length: %d\n", content_length);
-                                //find the boundary
-                                char boundary[256];
-                                char *boundary_start = strstr(buffer, "boundary=") + strlen("boundary=");
-                                char *boundary_end = strchr(boundary_start, '\r');
-                                strncpy(boundary, boundary_start, boundary_end - boundary_start);
-                                boundary[boundary_end - boundary_start] = '\0';
-                                fprintf(stderr, "[MAIN - Vid Uploads] Boundary: %s\n", boundary);
-                                //malloc a binary buffer to store the whole request
-                                char *request = (char *)malloc(content_length + 1);
-                                fprintf(stderr, "[MAIN - Vid Uploads] Setting up request buffer\n");
                                 
-                                int total_received = 0;
-                                //find the start of the file content
-                                char *file_content_start = strstr(buffer, "\r\n\r\n");
-                                fprintf(stderr, "[MAIN - Vid Uploads] File content start is located\n");
-                                fprintf(stderr, "[MAIN - Vid Uploads] File content start: %s\n", file_content_start);
-                                if (file_content_start) {
-                                    file_content_start += 4; // Move past "\r\n\r\n"
-                                    int file_content_length = bytes_received - (file_content_start - buffer);
-                                    fprintf(stderr, "[MAIN - Vid Uploads] File content length: %d\n", file_content_length);
-                                    memcpy(request, file_content_start, file_content_length);
-                                    total_received += file_content_length;
-                                }
-                                
-                                
-                                while (total_received < content_length) {
-                                    int bytes_to_read = content_length - total_received;
-                                    fprintf(stderr, "[MAIN - Vid Uploads] Bytes to read: %d\n", bytes_to_read);
-                                    int received = recv(connfd, request + total_received, bytes_to_read, 0);
-                                    if (received <= 0) {
-                                        perror("recv failed");
-                                        free(request);
-                                        return false;
-                                    }
-                                    total_received += received;
-                                }
-                            
-                                fprintf(stderr, "[MAIN - Vid Uploads] Parsing request buffer\n");
-                                fprintf(stderr, "[MAIN - Vid Uploads] DATA-----\n %s\n-----\n", request);
                                 if (parseData(request, content_length, connfd, 1)) {
                                     fprintf(stderr, "[MAIN - Vid Uploads] File uploaded successfully\n");
                                     //response 200 OK
