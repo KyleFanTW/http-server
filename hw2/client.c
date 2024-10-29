@@ -233,7 +233,6 @@ int main(int argc, char *argv[]) {
 
                 // generate a random boundary
                 char boundary[128];
-                //let the boundary be the filename encoded in base64
                 size_t encoded_length;
                 char *encoded_name = base64_encode((const unsigned char *)filename, strlen(filename), &encoded_length);
                 snprintf(boundary, sizeof(boundary), "----%s", encoded_name);
@@ -242,28 +241,32 @@ int main(int argc, char *argv[]) {
                 char boundaryheader[256];
                 snprintf(boundaryheader, sizeof(boundaryheader), "Content-Type: multipart/form-data; boundary=%s", boundary);
 
-                int fullContentLength = strlen(boundary) + 4 + strlen("Content-Disposition: form-data; name=\"file\"; filename=\"") + strlen(filename) + strlen("\"\r\n\r\n") + filesize + 2 + strlen(boundary) + 4;
+                int fullContentLength = strlen(boundary) + 4 
+                                + strlen("Content-Disposition: form-data; name=\"file\"; filename=\"") + strlen(filename) 
+                                + strlen("\"\r\n\r\n") + filesize + 2 
+                                + strlen(boundary) + 6;
 
 
 
-                snprintf(buffer, sizeof(buffer), "POST /api/file HTTP/1.1\r\n"
-                                            "Host: %s:%s\r\n"
-                                            "Connection: keep-alive\r\n"
-                                            "Content-Length: %d\r\n"
-                                            "%s\r\n"
-                                            "%s\r\n"
-                                            "User-Agent: CN2024Client/1.0\r\n"
-                                            "\r\n"
-                                            "--%s\r\n"
-                                            "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
-                                            "\r\n",
-                        argv[1], argv[2], fullContentLength, auth ? auth_header : "", boundaryheader, boundary, filename);
+                snprintf(buffer, sizeof(buffer), 
+                    "POST /api/file HTTP/1.1\r\n"
+                    "Host: %s:%s\r\n"
+                    "Connection: keep-alive\r\n"
+                    "Content-Length: %d\r\n"
+                    "%s\r\n"
+                    "User-Agent: CN2024Client/1.0\r\n"
+                    "\r\n"
+                    "--%s\r\n"
+                    "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
+                    "\r\n",
+                    argv[1], argv[2], fullContentLength, boundaryheader, boundary, filename);
+
                 // fprintf(stderr, "Request: %s\n", buffer);
                 send_http_request(sockfd, buffer);
                 send(sockfd, file_buffer, filesize, 0);
                 // fprintf(stderr, "File: %s\n", file_buffer);
                 memset(buffer, 0, sizeof(buffer));
-                snprintf(buffer, sizeof(buffer), "\r\n--%s\r\n", boundary);
+                snprintf(buffer, sizeof(buffer), "\r\n--%s--\r\n", boundary);
                 send(sockfd, buffer, strlen(buffer), 0);
                 // fprintf(stderr, "Request: %s\n", buffer);
                 free(file_buffer);
