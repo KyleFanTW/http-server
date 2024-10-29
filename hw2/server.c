@@ -514,6 +514,7 @@ bool downloader(char *buffer, int connfd, int video) {
         return false;
     } else {
         // Determine the file size using stat
+        fprintf(stderr, "[DL] File found: %s\n", filename);
         struct stat file_stat;
         if (fstat(file_fd, &file_stat) < 0) {
             send(connfd, ERROR500, strlen(ERROR500), 0);
@@ -522,21 +523,20 @@ bool downloader(char *buffer, int connfd, int video) {
             return false;
         }
         int file_size = file_stat.st_size;
+        fprintf(stderr, "[DL] File size: %d\n", file_size);
         char *extension = strrchr(filename, '.');
         char *content_type;
-        if (strcmp(extension, ".html") == 0 || strcmp(extension, ".rhtml") == 0) {
-            content_type = "text/html";
-        } else if (strcmp(extension, ".mp4") == 0 || strcmp(extension, ".m4v") == 0) {
-            content_type = "video/mp4";
-        } else if (strcmp(extension, ".m4s") == 0) {
-            content_type = "video/iso.segment";
-        } else if (strcmp(extension, ".m4a") == 0) {
-            content_type = "audio/mp4";
-        } else if (strcmp(extension, ".mpd") == 0) {
-            content_type = "application/dash+xml";
-        } else {
+        if (extension == NULL) {
             content_type = "text/plain";
+        } else{
+            if (strcmp(extension, ".html") == 0 || strcmp(extension, ".rhtml") == 0) content_type = "text/html";
+            else if (strcmp(extension, ".mp4") == 0 || strcmp(extension, ".m4v") == 0) content_type = "video/mp4";
+            else if (strcmp(extension, ".m4s") == 0) content_type = "video/iso.segment";
+            else if (strcmp(extension, ".m4a") == 0) content_type = "audio/mp4";
+            else if (strcmp(extension, ".mpd") == 0) content_type = "application/dash+xml";
+            else content_type = "text/plain";
         }
+        
         // Prepare and send the HTTP header once
         char header[1024];
         snprintf(header, sizeof(header), "HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\nContent-Type: %s\r\nContent-Length: %d\r\n\r\n", content_type, file_size);

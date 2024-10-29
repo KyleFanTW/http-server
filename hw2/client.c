@@ -48,9 +48,8 @@ void receive_http_get_response(int sockfd, char *filename) {
         ERR_EXIT("recv()");
     }
     buffer[n] = '\0';
-    printf("%s\n", buffer);
+    //fprintf(stderr, "Response: %s\n", buffer);
     
-    printf("%s\n", buffer);
     if (strstr(buffer, "200 OK") == NULL) {
         fprintf(stderr, "Command failed.\n");
     }
@@ -171,144 +170,162 @@ int main(int argc, char *argv[]) {
             break;
         }
         buffer[strcspn(buffer, "\n")] = '\0';  // Remove newline character
+        if (strcmp(buffer, "put") == 0) {
+            fprintf(stderr, "Usage: put [file]\n");
+        } else if (strcmp(buffer, "putv") == 0) {
+            fprintf(stderr, "Usage: putv [file]\n");
+        } else if (strcmp(buffer, "get") == 0) {
+            fprintf(stderr, "Usage: get [file]\n");
+        } 
 
-        if (strncmp(buffer, "put ", 4) == 0) {
-            // Upload file to /api/file
-            char filename[128];
-            sscanf(buffer, "put %[^\n]", filename);
+        else if (strncmp(buffer, "put ", 4) == 0) {
+            char filename[128] = "";  // Initialize an empty filename
+            
+            if (sscanf(buffer, "put %[^\n]", filename) != 1) {
+                fprintf(stderr, "Usage: put [file]\n");
+            } else {
+                
+                // fprintf(stderr, "[PUT] Uploading file: %s\n", filename);
+                FILE *file = fopen(filename, "rb");
+                if (!file) {
+                    fprintf(stderr, "Command failed.\n");
+                    continue;
+                }
+                // fprintf(stderr, "[PUT] File opened: %s\n", filename);
 
-            // fprintf(stderr, "[PUT] Uploading file: %s\n", filename);
-            FILE *file = fopen(filename, "rb");
-            if (!file) {
-                fprintf(stderr, "Command failed.\n");
-                continue;
+                fseek(file, 0, SEEK_END);
+                long filesize = ftell(file);
+                fseek(file, 0, SEEK_SET);
+
+                char *file_buffer = malloc(filesize);
+                fread(file_buffer, 1, filesize, file);
+                fclose(file);
+
+                // fprintf(stderr, "[PUT] File size: %ld\n", filesize);
+
+                // generate a random boundary
+                char boundary[128];
+                //let the boundary be the filename encoded in base64
+                size_t encoded_length;
+                char *encoded_name = base64_encode((const unsigned char *)filename, strlen(filename), &encoded_length);
+                snprintf(boundary, sizeof(boundary), "----%s", encoded_name);
+                boundary[(strlen(boundary) - 1)] = '\0';
+                free(encoded_name);
+                char boundaryheader[256];
+                snprintf(boundaryheader, sizeof(boundaryheader), "Content-Type: multipart/form-data; boundary=%s", boundary);
+
+                int fullContentLength = strlen(boundary) + 4 + strlen("Content-Disposition: form-data; name=\"file\"; filename=\"") + strlen(filename) + strlen("\"\r\n\r\n") + filesize + 2 + strlen(boundary) + 4;
+
+
+
+                snprintf(buffer, sizeof(buffer), "POST /api/file HTTP/1.1\r\n"
+                                            "Host: %s:%s\r\n"
+                                            "Connection: keep-alive\r\n"
+                                            "Content-Length: %d\r\n"
+                                            "%s\r\n"
+                                            "%s\r\n"
+                                            "User-Agent: CN2024Client/1.0\r\n"
+                                            "\r\n"
+                                            "--%s\r\n"
+                                            "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
+                                            "\r\n",
+                        argv[1], argv[2], fullContentLength, auth ? auth_header : "", boundaryheader, boundary, filename);
+                // fprintf(stderr, "Request: %s\n", buffer);
+                send_http_request(sockfd, buffer);
+                send(sockfd, file_buffer, filesize, 0);
+                // fprintf(stderr, "File: %s\n", file_buffer);
+                memset(buffer, 0, sizeof(buffer));
+                snprintf(buffer, sizeof(buffer), "\r\n--%s\r\n", boundary);
+                send(sockfd, buffer, strlen(buffer), 0);
+                // fprintf(stderr, "Request: %s\n", buffer);
+                free(file_buffer);
+
+                (receive_http_response(sockfd))? fprintf(stderr, "Command succeeded.\n") : fprintf(stderr, "Command failed.\n");
             }
-            // fprintf(stderr, "[PUT] File opened: %s\n", filename);
-
-            fseek(file, 0, SEEK_END);
-            long filesize = ftell(file);
-            fseek(file, 0, SEEK_SET);
-
-            char *file_buffer = malloc(filesize);
-            fread(file_buffer, 1, filesize, file);
-            fclose(file);
-
-            // fprintf(stderr, "[PUT] File size: %ld\n", filesize);
-
-            // generate a random boundary
-            char boundary[128];
-            //let the boundary be the filename encoded in base64
-            size_t encoded_length;
-            char *encoded_name = base64_encode((const unsigned char *)filename, strlen(filename), &encoded_length);
-            snprintf(boundary, sizeof(boundary), "----%s", encoded_name);
-            boundary[(strlen(boundary) - 1)] = '\0';
-            free(encoded_name);
-            char boundaryheader[256];
-            snprintf(boundaryheader, sizeof(boundaryheader), "Content-Type: multipart/form-data; boundary=%s", boundary);
-
-            int fullContentLength = strlen(boundary) + 4 + strlen("Content-Disposition: form-data; name=\"file\"; filename=\"") + strlen(filename) + strlen("\"\r\n\r\n") + filesize + 2 + strlen(boundary) + 4;
-
-
-
-            snprintf(buffer, sizeof(buffer), "POST /api/file HTTP/1.1\r\n"
-                                         "Host: %s:%s\r\n"
-                                         "Connection: keep-alive\r\n"
-                                         "Content-Length: %d\r\n"
-                                         "%s\r\n"
-                                         "%s\r\n"
-                                         "User-Agent: CN2024Client/1.0\r\n"
-                                         "\r\n"
-                                         "--%s\r\n"
-                                         "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
-                                         "\r\n",
-                     argv[1], argv[2], fullContentLength, auth ? auth_header : "", boundaryheader, boundary, filename);
-            // fprintf(stderr, "Request: %s\n", buffer);
-            send_http_request(sockfd, buffer);
-            send(sockfd, file_buffer, filesize, 0);
-            // fprintf(stderr, "File: %s\n", file_buffer);
-            memset(buffer, 0, sizeof(buffer));
-            snprintf(buffer, sizeof(buffer), "\r\n--%s\r\n", boundary);
-            send(sockfd, buffer, strlen(buffer), 0);
-            // fprintf(stderr, "Request: %s\n", buffer);
-            free(file_buffer);
-
-            (receive_http_response(sockfd))? fprintf(stderr, "Command succeeded.\n") : fprintf(stderr, "Command failed.\n");
 
         } else if (strncmp(buffer, "putv ", 5) == 0) {
-            // Upload video to /api/video
-            char filename[128];
-            sscanf(buffer, "putv %s", filename);
-            // fprintf(stderr, "[PUTV] Uploading file: %s\n", filename);
-            FILE *file = fopen(filename, "rb");
-            if (!file) {
-                fprintf(stderr, "Command failed.\n");
-                continue;
+            char filename[128] = "";  // Initialize an empty filename
+            
+            if (sscanf(buffer, "putv %[^\n]", filename) != 1) {
+                // No argument found after "put"
+                fprintf(stderr, "Usage: putv [file]\n");
+            } else {
+                // fprintf(stderr, "[PUTV] Uploading file: %s\n", filename);
+                FILE *file = fopen(filename, "rb");
+                if (!file) {
+                    fprintf(stderr, "Command failed.\n");
+                    continue;
+                }
+                // fprintf(stderr, "[PUTV] File opened: %s\n", filename);
+
+                fseek(file, 0, SEEK_END);
+                long filesize = ftell(file);
+                fseek(file, 0, SEEK_SET);
+
+                char *file_buffer = malloc(filesize);
+                fread(file_buffer, 1, filesize, file);
+                fclose(file);
+
+                // fprintf(stderr, "[PUTV] File size: %ld\n", filesize);
+
+                // generate a random boundary
+                char boundary[128];
+                //let the boundary be the filename encoded in base64
+                size_t encoded_length;
+                char *encoded_name = base64_encode((const unsigned char *)filename, strlen(filename), &encoded_length);
+                snprintf(boundary, sizeof(boundary), "----%s", encoded_name);
+                boundary[(strlen(boundary) - 1)] = '\0';
+                free(encoded_name);
+                char boundaryheader[256];
+                snprintf(boundaryheader, sizeof(boundaryheader), "Content-Type: multipart/form-data; boundary=%s", boundary);
+
+                int fullContentLength = strlen(boundary) + 4 + strlen("Content-Disposition: form-data; name=\"file\"; filename=\"") + strlen(filename) + strlen("\"\r\n\r\n") + filesize + 2 + strlen(boundary) + 4;
+
+
+
+                snprintf(buffer, sizeof(buffer), "POST /api/video HTTP/1.1\r\n"
+                                            "Host: %s:%s\r\n"
+                                            "Connection: keep-alive\r\n"
+                                            "Content-Length: %d\r\n"
+                                            "%s\r\n"
+                                            "%s\r\n"
+                                            "User-Agent: CN2024Client/1.0\r\n"
+                                            "\r\n"
+                                            "--%s\r\n"
+                                            "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
+                                            "\r\n",
+                        argv[1], argv[2], fullContentLength, auth ? auth_header : "", boundaryheader, boundary, filename);
+                // fprintf(stderr, "Request: %s\n", buffer);
+                send_http_request(sockfd, buffer);
+                send(sockfd, file_buffer, filesize, 0);
+                // fprintf(stderr, "File: %s\n", file_buffer);
+                memset(buffer, 0, sizeof(buffer));
+                snprintf(buffer, sizeof(buffer), "\r\n--%s\r\n", boundary);
+                send(sockfd, buffer, strlen(buffer), 0);
+                // fprintf(stderr, "Request: %s\n", buffer);
+                free(file_buffer);
+
+                (receive_http_response(sockfd))? fprintf(stderr, "Command succeeded.\n") : fprintf(stderr, "Command failed.\n");
             }
-            // fprintf(stderr, "[PUTV] File opened: %s\n", filename);
-
-            fseek(file, 0, SEEK_END);
-            long filesize = ftell(file);
-            fseek(file, 0, SEEK_SET);
-
-            char *file_buffer = malloc(filesize);
-            fread(file_buffer, 1, filesize, file);
-            fclose(file);
-
-            // fprintf(stderr, "[PUTV] File size: %ld\n", filesize);
-
-            // generate a random boundary
-            char boundary[128];
-            //let the boundary be the filename encoded in base64
-            size_t encoded_length;
-            char *encoded_name = base64_encode((const unsigned char *)filename, strlen(filename), &encoded_length);
-            snprintf(boundary, sizeof(boundary), "----%s", encoded_name);
-            boundary[(strlen(boundary) - 1)] = '\0';
-            free(encoded_name);
-            char boundaryheader[256];
-            snprintf(boundaryheader, sizeof(boundaryheader), "Content-Type: multipart/form-data; boundary=%s", boundary);
-
-            int fullContentLength = strlen(boundary) + 4 + strlen("Content-Disposition: form-data; name=\"file\"; filename=\"") + strlen(filename) + strlen("\"\r\n\r\n") + filesize + 2 + strlen(boundary) + 4;
-
-
-
-            snprintf(buffer, sizeof(buffer), "POST /api/video HTTP/1.1\r\n"
-                                         "Host: %s:%s\r\n"
-                                         "Connection: keep-alive\r\n"
-                                         "Content-Length: %d\r\n"
-                                         "%s\r\n"
-                                         "%s\r\n"
-                                         "User-Agent: CN2024Client/1.0\r\n"
-                                         "\r\n"
-                                         "--%s\r\n"
-                                         "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
-                                         "\r\n",
-                     argv[1], argv[2], fullContentLength, auth ? auth_header : "", boundaryheader, boundary, filename);
-            // fprintf(stderr, "Request: %s\n", buffer);
-            send_http_request(sockfd, buffer);
-            send(sockfd, file_buffer, filesize, 0);
-            // fprintf(stderr, "File: %s\n", file_buffer);
-            memset(buffer, 0, sizeof(buffer));
-            snprintf(buffer, sizeof(buffer), "\r\n--%s\r\n", boundary);
-            send(sockfd, buffer, strlen(buffer), 0);
-            // fprintf(stderr, "Request: %s\n", buffer);
-            free(file_buffer);
-
-            (receive_http_response(sockfd))? fprintf(stderr, "Command succeeded.\n") : fprintf(stderr, "Command failed.\n");
         } else if (strncmp(buffer, "get ", 4) == 0) {
-            // Download file from /api/file/{filepath}
-            char filename[128];
-            sscanf(buffer, "get %s", filename);
+            char filename[128] = "";  // Initialize an empty filename
+            
+            if (sscanf(buffer, "get %[^\n]", filename) != 1) {
+                // No argument found after "put"
+                fprintf(stderr, "Usage: get [file]\n");
+            } else {
             // fprintf(stderr, "[GET] Downloading file: %s\n", filename);
             
-            snprintf(buffer, sizeof(buffer), "GET /api/file/%s HTTP/1.1\r\n"
-                                           "Host: %s:%s\r\n"
-                                           "User-Agent: CN2024Client/1.0\r\n"
-                                           "Connection: keep-alive\r\n"
-                                           "%s\r\n"
-                                           "\r\n",
-                     filename, argv[1], argv[2], auth ? auth_header : "");
-            send_http_request(sockfd, buffer);
-            receive_http_get_response(sockfd, filename);
+                snprintf(buffer, sizeof(buffer), "GET /api/file/%s HTTP/1.1\r\n"
+                                            "Host: %s:%s\r\n"
+                                            "Connection: keep-alive\r\n"
+                                            "%s\r\n"
+                                            "User-Agent: CN2024Client/1.0\r\n"
+                                            "\r\n",
+                        filename, argv[1], argv[2], auth ? auth_header : "");
+                send_http_request(sockfd, buffer);
+                receive_http_get_response(sockfd, filename);
+            }
         } else if (strcmp(buffer, "quit") == 0) {
             printf("Bye.\n");
             break;
