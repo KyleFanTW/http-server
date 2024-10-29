@@ -29,7 +29,7 @@ int receive_http_response(int sockfd) {
     //printf("%s\n", buffer);
     
     //if 401 unauthorized return 401
-    if (strstr(buffer, "200 OK") != NULL) {
+    if (strstr(buffer, "HTTP/1.1 200") != NULL) {
         // fprintf(stderr, "[RCV] Command failed.\n");
         return 1;
     }
@@ -193,7 +193,7 @@ int main(int argc, char *argv[]) {
         if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
             break;
         }
-        buffer[strcspn(buffer, "\n")] = '\0';  
+        buffer[strcspn(buffer, "\n")] = '\0';  // Remove newline character
 
         close(sockfd);
         sockfd = establish_connection(ip, atoi(argv[2]));
