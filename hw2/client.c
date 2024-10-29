@@ -242,7 +242,7 @@ int main(int argc, char *argv[]) {
                 char boundaryheader[256];
                 snprintf(boundaryheader, sizeof(boundaryheader), "Content-Type: multipart/form-data; boundary=%s", boundary);
 
-                int fullContentLength = strlen(boundary) + 4 + strlen("Content-Disposition: form-data; name=\"file\"; filename=\"") + strlen(filename) + strlen("\"\r\n\r\n") + filesize + 2 + strlen(boundary) + 6;
+                int fullContentLength = strlen(boundary) + 4 + strlen("Content-Disposition: form-data; name=\"upfile\"; filename=\"") + strlen(filename) + strlen("\"\r\n\r\n") + filesize + 2 + strlen(boundary) + 6;
 
 
 
@@ -255,7 +255,7 @@ int main(int argc, char *argv[]) {
                                             "User-Agent: CN2024Client/1.0\r\n"
                                             "\r\n"
                                             "--%s\r\n"
-                                            "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
+                                            "Content-Disposition: form-data; name=\"upfile\"; filename=\"%s\"\r\n"
                                             "\r\n",
                         argv[1], argv[2], fullContentLength, auth ? auth_header : "", boundaryheader, boundary, filename);
                 // fprintf(stderr, "Request: %s\n", buffer);
