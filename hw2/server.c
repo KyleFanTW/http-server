@@ -28,6 +28,16 @@
 #define ERROR4050 "HTTP/1.1 405 Method Not Allowed\r\nServer: CN2024Server/1.0\r\nAllow: POST\r\nContent-Length: 0\r\n\r\n"
 #define ERROR500 " HTTP/1.1 500 Internal Server Error\r\nServer: CN2024Server/1.0\r\nContent-Length: 0\r\n\r\n"
 
+void *convert_video(void *arg);
+char* find_boundary(const char* haystack, size_t haystack_len, const char* needle, size_t needle_len);
+bool parseData(char *buffer, int buffer_length, int connfd, int video);
+bool should_keep_alive(const char *request);
+char *url_encode(const char *str);
+char *url_decode(const char *str);
+bool authenticate(const char *auth_header);
+bool sendPage(int connfd, char *filename, int dynamic);
+bool downloader(char *buffer, int connfd, int video);
+
 
 /*
 //use shell script to convert video into dash
@@ -69,6 +79,10 @@ void *convert_video(void *arg) {
 
 char* find_boundary(const char* haystack, size_t haystack_len, const char* needle, size_t needle_len) {
     fprintf(stderr, "[UTIL] Finding boundary\n");
+    if (haystack_len < needle_len) {
+        fprintf(stderr, "[UTIL] Error: haystack_len %ld < needle_len %ld\n", haystack_len, needle_len);
+        return NULL;
+    }
     for (size_t i = 0; i <= haystack_len - needle_len; i++) {
         if (memcmp(haystack + i, needle, needle_len) == 0) {
             return (char*)(haystack + i);
@@ -80,6 +94,7 @@ char* find_boundary(const char* haystack, size_t haystack_len, const char* needl
 
 bool parseData(char *buffer, int buffer_length, int connfd, int video) {
     // Find the boundary
+    //fprintf(stderr, "[PARSER] Parsing: %s\n", buffer);
     char *boundary_start = strstr(buffer, "\r\n");
     if (!boundary_start) {
         fprintf(stderr, "[PARSER] Failed to find boundary\n");
@@ -89,6 +104,8 @@ bool parseData(char *buffer, int buffer_length, int connfd, int video) {
     strncpy(boundary, buffer, boundary_start - buffer);
     boundary[boundary_start - buffer] = '\0';
     fprintf(stderr, "[PARSER] Boundary: %s\n", boundary);
+    char boundary_end[256];
+    snprintf(boundary_end, sizeof(boundary_end), "\r\n--", boundary);
 
     // Find the filename
     char *filename_start = strstr(buffer, "filename=\"");
@@ -110,15 +127,15 @@ bool parseData(char *buffer, int buffer_length, int connfd, int video) {
     }
     file_content_start += 4; // Move past "\r\n\r\n"
 
-    size_t content_size = buffer + buffer_length - file_content_start;
-    char *file_content_end = find_boundary(file_content_start, content_size, boundary, strlen(boundary));
+    char *file_content_end = find_boundary(buffer, buffer_length, boundary_end, strlen(boundary_end));
     if (!file_content_end) {
         fprintf(stderr, "[PARSER] Failed to find end of file content\n");
         return false;
     }
-    file_content_end -= 2; // Move back past "\r\n"
+    
+    fprintf(stderr, "[PARSER] Found end of file content\n");
+    fprintf(stderr, "[PARSER] File content size: %ld\n", file_content_end - file_content_start);
 
-    int file_content_length = file_content_end - file_content_start;
 
     char file_path[256];
     if (video == 1) {
@@ -126,6 +143,7 @@ bool parseData(char *buffer, int buffer_length, int connfd, int video) {
     } else {
         snprintf(file_path, sizeof(file_path), "./web/files/%s", filename);
     }
+    fprintf(stderr, "[PARSER] File path: %s\n", file_path);
     //if is video and the directory does not exist, create it
     if (video == 1) {
         struct stat st = {0};
@@ -139,15 +157,18 @@ bool parseData(char *buffer, int buffer_length, int connfd, int video) {
             mkdir("./web/files", 0700);
         }
     }
+    fprintf(stderr, "[PARSER] Ensure directory exists\n");
     FILE *file = fopen(file_path, "wb");
     if (!file) {
         send(connfd, ERROR500, strlen(ERROR500), 0);
         fprintf(stderr, "[PARSER] File creation failed\n");
         return false;
     }
+    fprintf(stderr, "[PARSER] File created\n");
 
-    fwrite(file_content_start, 1, file_content_length, file);
+    fwrite(file_content_start, 1, file_content_end - file_content_start, file);
     fclose(file);
+    fprintf(stderr, "[PARSER] File written\n");
     if (video == 1) {
         pthread_t tid;
         //strip off the .mp4
@@ -208,7 +229,7 @@ char *url_decode(const char *str) {
 
 
 bool authenticate(const char *auth_header) {
-    //fprintf(stderr, "Auth header: %s\n", auth_header);
+    fprintf(stderr, "Auth header: %s\n", auth_header);
     if (!auth_header) return false;
     char encoded[512];
     sscanf(auth_header, "Authorization: Basic %s", encoded);
@@ -241,6 +262,7 @@ bool authenticate(const char *auth_header) {
     char line[64];
     while (fgets(line, sizeof(line), file)) {
         line[strcspn(line, "\n")] = '\0';  // Remove newline character
+        fprintf(stderr, "[AUTH] Comparing %s with %s\n", line, decoded);
         if (strcmp(line, decoded) == 0) {
             fprintf(stderr, "[AUTH] Authenticated for user: %s\n", line);
             fclose(file);
@@ -611,7 +633,7 @@ int main(int argc, char *argv[]) {
                 if (bytes_received <= 0) {
                     
                     // Client disconnected or error occurred
-                    printf("Closing connection: fd %d\n", poll_fds[i].fd);
+                    fprintf(stderr, "[MAIN - CON] Client disconnected or error occurred on connfd %d\n", poll_fds[i].fd);
                     close(poll_fds[i].fd);
                     poll_fds[i] = poll_fds[nfds - 1];  // Remove from poll set
                     nfds--;
@@ -629,9 +651,7 @@ int main(int argc, char *argv[]) {
 
                     buffer[bytes_received] = '\0';
                     char *auth_header = strstr(buffer, "Authorization: ");
-                    //fprintf(stderr, "Received request: %s\n", buffer);
-                    //fprintf(stderr, "Auth header IS : %s\n", auth_header);
-                
+
                     if (!auth_header || !authenticate(auth_header)) auth = false;
                     else auth = true;
                 
@@ -663,7 +683,7 @@ int main(int argc, char *argv[]) {
                                     fprintf(stderr, "[MAIN - File Uploads] Send 401 Unauthorized for /api/file\n");
                                     continue;
                                 }
-                                fprintf(stderr, "[MAIN - File Uploads] Uploading\n");
+                                fprintf(stderr, "[MAIN - File Uploads] Uploading: %s\n", buffer);
                                 int content_length = 0;
                                 sscanf(strstr(buffer, "Content-Length: ") + strlen("Content-Length: "), "%d", &content_length);
                                 fprintf(stderr, "[MAIN - File Uploads] Content-Length: %d\n", content_length);
@@ -673,16 +693,16 @@ int main(int argc, char *argv[]) {
                                 char *boundary_end = strchr(boundary_start, '\r');
                                 strncpy(boundary, boundary_start, boundary_end - boundary_start);
                                 boundary[boundary_end - boundary_start] = '\0';
-                                fprintf(stderr, "[MAIN - Vid Uploads] Boundary: %s\n", boundary);
+                                fprintf(stderr, "[MAIN - File Uploads] Boundary: %s\n", boundary);
                                 //malloc a binary buffer to store the whole request
                                 char *request = (char *)malloc(content_length + 1);
-                                fprintf(stderr, "[MAIN - Vid Uploads] Setting up request buffer\n");
+                                fprintf(stderr, "[MAIN - File Uploads] Setting up request buffer\n");
                                 
                                 int total_received = 0;
                                 //find the start of the file content
                                 char *file_content_start = strstr(buffer, "\r\n\r\n");
-                                fprintf(stderr, "[MAIN - Vid Uploads] File content start is located\n");
-                                fprintf(stderr, "[MAIN - Vid Uploads] File content start: %s\n", file_content_start);
+                                fprintf(stderr, "[MAIN - File Uploads] File content start is located\n");
+                                fprintf(stderr, "[MAIN - File Uploads] File content start: %s\n", file_content_start);
                                 if (file_content_start) {
                                     file_content_start += 4; // Move past "\r\n\r\n"
                                     int file_content_length = bytes_received - (file_content_start - buffer);
@@ -694,7 +714,7 @@ int main(int argc, char *argv[]) {
                                 
                                 while (total_received < content_length) {
                                     int bytes_to_read = content_length - total_received;
-                                    fprintf(stderr, "[MAIN - Vid Uploads] Bytes to read: %d\n", bytes_to_read);
+                                    fprintf(stderr, "[MAIN - File Uploads] Bytes to read: %d\n", bytes_to_read);
                                     int received = recv(connfd, request + total_received, bytes_to_read, 0);
                                     if (received <= 0) {
                                         perror("recv failed");
@@ -876,7 +896,7 @@ int main(int argc, char *argv[]) {
                         }
                         send(connfd, ERROR404, strlen(ERROR404), 0);
                         fprintf(stderr, "[MAIN - Misc] Send 404 Not Found for unknown request\n");
-                        fprintf(stderr, "[MAIN - Misc] Unknown request: %s\n", url);
+                        //fprintf(stderr, "[MAIN - Misc] Unknown request: %s\n", url);
                     }
 
                     if (!keep_alive) {
