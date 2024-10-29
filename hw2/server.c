@@ -321,10 +321,23 @@ bool sendPage(int connfd, char *filename, int dynamic) {
             }
             file_content[read_bytes] = '\0';
             close(file_fd);
+            //CHECK THIS
+            if (video == 1) {
+                struct stat st = {0};
+                if (stat("./web/videos", &st) == -1) {
+                    mkdir("./web/videos", 0700);
+                }
+            }
+            else {
+                struct stat st = {0};
+                if (stat("./web/files", &st) == -1) {
+                    mkdir("./web/files", 0700);
+                }
+            }
             DIR *dir = (video == 0) ? opendir("./web/files") : opendir("./web/videos");
             if (!dir) {
                 send(connfd, ERROR404, strlen(ERROR404), 0);
-                fprintf(stderr, "[PAGE] Send 404 due to file not found for /file/ or /video/\n");
+                fprintf(stderr, "[PAGE] Send 404 due to directory not found for %s\n", filename);
             } else {
                 struct dirent *entry;
                 char files_list[4096] = "";

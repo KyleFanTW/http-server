@@ -32,11 +32,11 @@ int receive_http_response(int sockfd) {
         return 401;
     }
     else if (strstr(buffer, "200 OK") == NULL) {
-        fprintf(stderr, "[RCV] Command failed.\n");
+        // fprintf(stderr, "[RCV] Command failed.\n");
         return 0;
     }
     else {
-        fprintf(stderr, "[RCV] Command successful.\n");
+        // fprintf(stderr, "[RCV] Command successful.\n");
         return 1;
     }
 }
@@ -63,7 +63,7 @@ void receive_http_get_response(int sockfd, char *filename) {
         strncpy(content_length_str, content_length_start, content_length_end - content_length_start);
         content_length_str[content_length_end - content_length_start] = '\0';
         int content_length = atoi(content_length_str);
-        fprintf(stderr, "Content-Length: %d\n", content_length);
+        // fprintf(stderr, "Content-Length: %d\n", content_length);
         //parse content
         char *filebuffer = (char *)malloc(content_length+10);
         int total_received = 0;
@@ -77,7 +77,7 @@ void receive_http_get_response(int sockfd, char *filename) {
             }
             total_received += received;
         }
-        fprintf(stderr, "Received %d bytes\n", total_received);
+        // fprintf(stderr, "Received %d bytes\n", total_received);
         FILE *file = fopen(filename, "wb");
         fwrite(filebuffer, 1, content_length, file);
         fclose(file);
@@ -159,7 +159,7 @@ int main(int argc, char *argv[]) {
             return -1; //CHECK THIS
         }
         else {
-            fprintf(stderr, "[MAIN - AUTH] Authenticated.\n");
+            // fprintf(stderr, "[MAIN - AUTH] Authenticated.\n");
             auth = true;
         }
     }
@@ -177,13 +177,13 @@ int main(int argc, char *argv[]) {
             char filename[128];
             sscanf(buffer, "put %[^\n]", filename);
 
-            fprintf(stderr, "[PUT] Uploading file: %s\n", filename);
+            // fprintf(stderr, "[PUT] Uploading file: %s\n", filename);
             FILE *file = fopen(filename, "rb");
             if (!file) {
                 fprintf(stderr, "Command failed.\n");
                 continue;
             }
-            fprintf(stderr, "[PUT] File opened: %s\n", filename);
+            // fprintf(stderr, "[PUT] File opened: %s\n", filename);
 
             fseek(file, 0, SEEK_END);
             long filesize = ftell(file);
@@ -193,7 +193,7 @@ int main(int argc, char *argv[]) {
             fread(file_buffer, 1, filesize, file);
             fclose(file);
 
-            fprintf(stderr, "[PUT] File size: %ld\n", filesize);
+            // fprintf(stderr, "[PUT] File size: %ld\n", filesize);
 
             // generate a random boundary
             char boundary[128];
@@ -222,14 +222,14 @@ int main(int argc, char *argv[]) {
                                          "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
                                          "\r\n",
                      argv[1], argv[2], fullContentLength, auth ? auth_header : "", boundaryheader, boundary, filename);
-            fprintf(stderr, "Request: %s\n", buffer);
+            // fprintf(stderr, "Request: %s\n", buffer);
             send_http_request(sockfd, buffer);
             send(sockfd, file_buffer, filesize, 0);
-            fprintf(stderr, "File: %s\n", file_buffer);
+            // fprintf(stderr, "File: %s\n", file_buffer);
             memset(buffer, 0, sizeof(buffer));
             snprintf(buffer, sizeof(buffer), "\r\n--%s\r\n", boundary);
             send(sockfd, buffer, strlen(buffer), 0);
-            fprintf(stderr, "Request: %s\n", buffer);
+            // fprintf(stderr, "Request: %s\n", buffer);
             free(file_buffer);
 
             (receive_http_response(sockfd))? fprintf(stderr, "Command succeeded.\n") : fprintf(stderr, "Command failed.\n");
@@ -238,13 +238,13 @@ int main(int argc, char *argv[]) {
             // Upload video to /api/video
             char filename[128];
             sscanf(buffer, "putv %s", filename);
-            fprintf(stderr, "[PUTV] Uploading file: %s\n", filename);
+            // fprintf(stderr, "[PUTV] Uploading file: %s\n", filename);
             FILE *file = fopen(filename, "rb");
             if (!file) {
                 fprintf(stderr, "Command failed.\n");
                 continue;
             }
-            fprintf(stderr, "[PUTV] File opened: %s\n", filename);
+            // fprintf(stderr, "[PUTV] File opened: %s\n", filename);
 
             fseek(file, 0, SEEK_END);
             long filesize = ftell(file);
@@ -254,7 +254,7 @@ int main(int argc, char *argv[]) {
             fread(file_buffer, 1, filesize, file);
             fclose(file);
 
-            fprintf(stderr, "[PUTV] File size: %ld\n", filesize);
+            // fprintf(stderr, "[PUTV] File size: %ld\n", filesize);
 
             // generate a random boundary
             char boundary[128];
@@ -283,14 +283,14 @@ int main(int argc, char *argv[]) {
                                          "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
                                          "\r\n",
                      argv[1], argv[2], fullContentLength, auth ? auth_header : "", boundaryheader, boundary, filename);
-            fprintf(stderr, "Request: %s\n", buffer);
+            // fprintf(stderr, "Request: %s\n", buffer);
             send_http_request(sockfd, buffer);
             send(sockfd, file_buffer, filesize, 0);
-            fprintf(stderr, "File: %s\n", file_buffer);
+            // fprintf(stderr, "File: %s\n", file_buffer);
             memset(buffer, 0, sizeof(buffer));
             snprintf(buffer, sizeof(buffer), "\r\n--%s\r\n", boundary);
             send(sockfd, buffer, strlen(buffer), 0);
-            fprintf(stderr, "Request: %s\n", buffer);
+            // fprintf(stderr, "Request: %s\n", buffer);
             free(file_buffer);
 
             (receive_http_response(sockfd))? fprintf(stderr, "Command succeeded.\n") : fprintf(stderr, "Command failed.\n");
@@ -298,7 +298,7 @@ int main(int argc, char *argv[]) {
             // Download file from /api/file/{filepath}
             char filename[128];
             sscanf(buffer, "get %s", filename);
-            fprintf(stderr, "[GET] Downloading file: %s\n", filename);
+            // fprintf(stderr, "[GET] Downloading file: %s\n", filename);
             
             snprintf(buffer, sizeof(buffer), "GET /api/file/%s HTTP/1.1\r\n"
                                            "Host: %s:%s\r\n"
