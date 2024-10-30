@@ -69,6 +69,11 @@ void receive_http_get_response(int sockfd, char *filename) {
         //parse content
         char *filebuffer = (char *)malloc(content_length+10);
         int total_received = 0;
+        char *file_content_start = strstr(buffer, "\r\n\r\n") + 4;
+        int file_content_length = n - (file_content_start - buffer);
+        memcpy(filebuffer, file_content_start, file_content_length);
+        total_received += file_content_length;
+        
         while (total_received < content_length) {
             int bytes_to_read = content_length - total_received;
             int received = recv(sockfd, filebuffer + total_received, bytes_to_read, 0);
@@ -76,6 +81,9 @@ void receive_http_get_response(int sockfd, char *filename) {
                 perror("recv failed");
                 free(filebuffer);
                 return;
+            }
+            else if (received == 0) {
+                break;  // Connection closed
             }
             total_received += received;
         }
@@ -397,7 +405,6 @@ int main(int argc, char *argv[]) {
                char encoded_filename[256];
                 snprintf(encoded_filename, sizeof(encoded_filename), "%s", url_encode(filename));
 
-            
                 snprintf(buffer, sizeof(buffer), "GET /api/file/%s HTTP/1.1\r\n"
                                             "Host: %s:%s\r\n"
                                             "Connection: keep-alive\r\n"
