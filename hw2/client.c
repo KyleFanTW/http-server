@@ -57,7 +57,7 @@ void receive_http_get_response(int sockfd, char *filename) {
         fprintf(stderr, "Command failed.\n");
     }
     else {
-        fprintf(stderr, "Command succeeded.\n");
+        
         //parse content length
         char *content_length_start = strstr(buffer, "Content-Length: ") + strlen("Content-Length: ");
         char *content_length_end = strstr(content_length_start, "\r\n");
@@ -72,23 +72,22 @@ void receive_http_get_response(int sockfd, char *filename) {
         while (total_received < content_length) {
             int bytes_to_read = content_length - total_received;
             int received = recv(sockfd, filebuffer + total_received, bytes_to_read, 0);
-            if (received <= 0) {
+            if (received < 0) {
                 perror("recv failed");
                 free(filebuffer);
                 return;
             }
             total_received += received;
         }
-        // fprintf(stderr, "Received %d bytes\n", total_received);
+        //fprintf(stderr, "Received %d bytes\n", total_received);
         char path[256];
         snprintf(path, sizeof(path), "./files/%s", filename);
+        //fprintf(stderr, "Saving file to %s\n", path);
         FILE *file = fopen(path, "wb");
         fwrite(filebuffer, 1, content_length, file);
         fclose(file);
         free(filebuffer);
-
-
-
+        fprintf(stderr, "Command succeeded.\n");
         
     }
 }
@@ -117,6 +116,42 @@ int establish_connection(const char *host_ip, int port) {
 
     return sockfd;
 }
+
+char *url_encode(const char *str) {
+    char *encoded = malloc(strlen(str) * 3 + 1);  
+    char *pencoded = encoded;  
+
+    while (*str) {
+        if (isalnum(*str) || *str == '-' || *str == '_' || *str == '.' || *str == '~') {
+            *pencoded++ = *str;  
+        } else {
+            pencoded += sprintf(pencoded, "%%%02X", (unsigned char)*str);
+        }
+        str++;
+    }
+
+    *pencoded = '\0';  
+    return encoded;
+}
+
+
+char *url_decode(const char *str) {
+    char *decoded = malloc(strlen(str) + 1); 
+    char *pdecoded = decoded;  
+    while (*str) {
+        if (*str == '%') {
+            int value;
+            sscanf(str + 1, "%2x", &value); 
+            *pdecoded++ = (char)value;
+            str += 3; 
+        } else {
+            *pdecoded++ = *str++;
+        }
+    }
+    *pdecoded = '\0'; 
+    return decoded;
+}
+
 
 int main(int argc, char *argv[]) {
     int sockfd;
@@ -359,6 +394,9 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "Usage: get [file]\n");
             } else {
             // fprintf(stderr, "[GET] Downloading file: %s\n", filename);
+               char encoded_filename[256];
+                snprintf(encoded_filename, sizeof(encoded_filename), "%s", url_encode(filename));
+
             
                 snprintf(buffer, sizeof(buffer), "GET /api/file/%s HTTP/1.1\r\n"
                                             "Host: %s:%s\r\n"
@@ -366,7 +404,7 @@ int main(int argc, char *argv[]) {
                                             "%s\r\n"
                                             "User-Agent: CN2024Client/1.0\r\n"
                                             "\r\n",
-                        filename, argv[1], argv[2], auth ? auth_header : "");
+                        encoded_filename, argv[1], argv[2], auth ? auth_header : "");
                 send_http_request(sockfd, buffer);
                 receive_http_get_response(sockfd, filename);
             }
