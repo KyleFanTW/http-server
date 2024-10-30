@@ -82,7 +82,7 @@ void receive_http_get_response(int sockfd, char *filename) {
         // fprintf(stderr, "Received %d bytes\n", total_received);
         char path[256];
         snprintf(path, sizeof(path), "./files/%s", filename);
-        FILE *file = fopen(filename, "wb");
+        FILE *file = fopen(path, "wb");
         fwrite(filebuffer, 1, content_length, file);
         fclose(file);
         free(filebuffer);
