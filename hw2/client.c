@@ -13,6 +13,8 @@
 #define BUFF_SIZE 2048
 #define ERR_EXIT(a) { perror(a); exit(1); }
 
+int increment;
+
 void send_http_request(int sockfd, const char *request) {
     if (send(sockfd, request, strlen(request), 0) < 0) {
         ERR_EXIT("send()");
@@ -48,7 +50,7 @@ void receive_http_get_response(int sockfd, char *filename) {
     buffer[n] = '\0';
     //fprintf(stderr, "Response: %s\n", buffer);
     
-    if (strstr(buffer, "200 OK") == NULL) {
+    if (strstr(buffer, "HTTP/1.1 200") == NULL) {
         fprintf(stderr, "Command failed.\n");
     }
     else {
@@ -118,6 +120,7 @@ int main(int argc, char *argv[]) {
     bool auth = false;
     char auth_header[512] = {};
     signal(SIGPIPE, SIG_IGN);
+    increment = 0;
 
     // Parse the arguments
     if (argc != 3 && argc != 4) {
@@ -236,7 +239,8 @@ int main(int argc, char *argv[]) {
                 //let the boundary be the filename encoded in base64
                 size_t encoded_length;
                 char *encoded_name = base64_encode((const unsigned char *)filename, strlen(filename), &encoded_length);
-                snprintf(boundary, sizeof(boundary), "----%s", encoded_name);
+                snprintf(boundary, sizeof(boundary), "----%s%d", encoded_name, increment);
+                increment++;
                 boundary[(strlen(boundary) - 1)] = '\0';
                 free(encoded_name);
                 char boundaryheader[256];
@@ -252,7 +256,9 @@ int main(int argc, char *argv[]) {
                                             "Content-Length: %d\r\n"
                                             "%s\r\n"
                                             "%s\r\n"
-                                            "User-Agent: CN2024Client/1.0\r\n"
+                                            "User-Age
+                                            
+                                            nt: CN2024Client/1.0\r\n"
                                             "\r\n"
                                             "--%s\r\n"
                                             "Content-Disposition: form-data; name=\"upfile\"; filename=\"%s\"\r\n"
@@ -268,21 +274,7 @@ int main(int argc, char *argv[]) {
                 // fprintf(stderr, "Request: %s\n", buffer);
                 free(file_buffer);
 
-                //(receive_http_response(sockfd))? fprintf(stderr, "Command succeeded.\n") : fprintf(stderr, "Command failed.\n");
-                char buffer2[BUFF_SIZE];
-                ssize_t n;
-                if ((n = recv(sockfd, buffer2, sizeof(buffer2) - 1, 0)) < 0) {
-                    ERR_EXIT("recv()");
-                }
-                buffer2[n] = '\0';
-                //alternate all \n to " "
-                for (int i = 0; i < strlen(buffer2); i++) {
-                    if (buffer2[i] == '\n') {
-                        buffer2[i] = ' ';
-                    }
-                }
-                buffer2[n] = '\0';
-                fprintf(stderr, "Response: %s\n", buffer2);
+                (receive_http_response(sockfd))? fprintf(stderr, "Command succeeded.\n") : fprintf(stderr, "Command failed.\n");
 
             }
 
@@ -316,7 +308,8 @@ int main(int argc, char *argv[]) {
                 //let the boundary be the filename encoded in base64
                 size_t encoded_length;
                 char *encoded_name = base64_encode((const unsigned char *)filename, strlen(filename), &encoded_length);
-                snprintf(boundary, sizeof(boundary), "----%s", encoded_name);
+                snprintf(boundary, sizeof(boundary), "----%s%d", encoded_name, increment);
+                increment++;
                 boundary[(strlen(boundary) - 1)] = '\0';
                 free(encoded_name);
                 char boundaryheader[256];
