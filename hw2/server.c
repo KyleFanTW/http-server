@@ -501,6 +501,12 @@ bool downloader(char *buffer, int connfd, int video) {
     fprintf(stderr, "[DL] Requested file: %s\n", filename);
     //open the file
     char file_path[256];
+    // sanitize the filename, if it contains ".." then return 404
+    if (strstr(filename, "..") != NULL) {
+        send(connfd, ERROR404, strlen(ERROR404), 0);
+        fprintf(stderr, "[DL] Send 404 due to file not found for /api/file or video/%s\n", filename);
+        return false;
+    }
     if (video == 1) {
         snprintf(file_path, sizeof(file_path), "./web/videos/%s", filename);
     } else {
@@ -619,7 +625,7 @@ int main(int argc, char *argv[]) {
     if (stat("./web/videos", &st) == -1) {
         mkdir("./web/videos", 0700);
     }
-    
+
 
     while (1) {
         int poll_count = poll(poll_fds, nfds, -1);  // Wait for events

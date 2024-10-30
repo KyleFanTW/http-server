@@ -8,6 +8,9 @@
 #include<fcntl.h>
 #include<stdbool.h>
 #include<signal.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+
 #include"utils/base64.h"
 
 #define BUFF_SIZE 2048
@@ -77,6 +80,8 @@ void receive_http_get_response(int sockfd, char *filename) {
             total_received += received;
         }
         // fprintf(stderr, "Received %d bytes\n", total_received);
+        char path[256];
+        snprintf(path, sizeof(path), "./files/%s", filename);
         FILE *file = fopen(filename, "wb");
         fwrite(filebuffer, 1, content_length, file);
         fclose(file);
@@ -188,6 +193,11 @@ int main(int argc, char *argv[]) {
             // fprintf(stderr, "[MAIN - AUTH] Authenticated.\n");
             auth = true;
         }
+    }
+    // check directory
+    struct stat st = {0};
+    if (stat("./files", &st) == -1) {
+        mkdir("./files", 0700);
     }
 
     while (1) {
