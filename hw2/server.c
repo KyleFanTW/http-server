@@ -608,6 +608,19 @@ int main(int argc, char *argv[]) {
     int flag = fcntl(listenfd, F_GETFL, 0);
     fcntl(listenfd, F_SETFL, flag | O_NONBLOCK);
 
+    //Check existence of web directory
+    struct stat st = {0};
+    if (stat("./web", &st) == -1) {
+        mkdir("./web", 0700);
+    }
+    if (stat("./web/files", &st) == -1) {
+        mkdir("./web/files", 0700);
+    }
+    if (stat("./web/videos", &st) == -1) {
+        mkdir("./web/videos", 0700);
+    }
+    
+
     while (1) {
         int poll_count = poll(poll_fds, nfds, -1);  // Wait for events
 

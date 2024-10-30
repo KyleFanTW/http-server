@@ -237,12 +237,12 @@ int main(int argc, char *argv[]) {
                 // generate a random boundary
                 char boundary[128];
                 //let the boundary be the filename encoded in base64
-                size_t encoded_length;
-                char *encoded_name = base64_encode((const unsigned char *)filename, strlen(filename), &encoded_length);
-                snprintf(boundary, sizeof(boundary), "----%s%d", encoded_name, increment);
+                //size_t encoded_length;
+                //char *encoded_name = base64_encode((const unsigned char *)filename, strlen(filename), &encoded_length);
+                snprintf(boundary, sizeof(boundary), "----%s%d", "abc", increment);
                 increment++;
                 boundary[(strlen(boundary) - 1)] = '\0';
-                free(encoded_name);
+                //free(encoded_name);
                 char boundaryheader[256];
                 snprintf(boundaryheader, sizeof(boundaryheader), "Content-Type: multipart/form-data; boundary=%s", boundary);
 
@@ -256,9 +256,7 @@ int main(int argc, char *argv[]) {
                                             "Content-Length: %d\r\n"
                                             "%s\r\n"
                                             "%s\r\n"
-                                            "User-Age
-                                            
-                                            nt: CN2024Client/1.0\r\n"
+                                            "User-Agent: CN2024Client/1.0\r\n"
                                             "\r\n"
                                             "--%s\r\n"
                                             "Content-Disposition: form-data; name=\"upfile\"; filename=\"%s\"\r\n"
@@ -306,12 +304,12 @@ int main(int argc, char *argv[]) {
                 // generate a random boundary
                 char boundary[128];
                 //let the boundary be the filename encoded in base64
-                size_t encoded_length;
-                char *encoded_name = base64_encode((const unsigned char *)filename, strlen(filename), &encoded_length);
-                snprintf(boundary, sizeof(boundary), "----%s%d", encoded_name, increment);
+                //size_t encoded_length;
+                //char *encoded_name = base64_encode((const unsigned char *)filename, strlen(filename), &encoded_length);
+                snprintf(boundary, sizeof(boundary), "----%s%d", "abc", increment);
                 increment++;
                 boundary[(strlen(boundary) - 1)] = '\0';
-                free(encoded_name);
+                //free(encoded_name);
                 char boundaryheader[256];
                 snprintf(boundaryheader, sizeof(boundaryheader), "Content-Type: multipart/form-data; boundary=%s", boundary);
 
