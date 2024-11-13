@@ -100,11 +100,11 @@ bool parseData(char *buffer, int buffer_length, int connfd, int video) {
         fprintf(stderr, "[PARSER] Failed to find boundary\n");
         return false;
     }
-    char boundary[256];
+    char boundary[128];
     strncpy(boundary, buffer, boundary_start - buffer);
     boundary[boundary_start - buffer] = '\0';
     fprintf(stderr, "[PARSER] Boundary: %s\n", boundary);
-    char boundary_end[256];
+    char boundary_end[144];
     snprintf(boundary_end, sizeof(boundary_end), "\r\n%s", boundary);
 
 
@@ -344,7 +344,7 @@ bool sendPage(int connfd, char *filename, int dynamic) {
                 while ((entry = readdir(dir)) != NULL) {
                     if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
                     char *encoded_name = url_encode(entry->d_name);  // Encode the file name
-                    char row[256];
+                    char row[324];
                     if (video == 0) snprintf(row, sizeof(row), "<tr><td><a href=\"/api/file/%s\">%s</a></td></tr>\n", encoded_name, entry->d_name);
                     else snprintf(row, sizeof(row), "<tr><td><a href=\"/video/%s\">%s</a></td></tr>\n", encoded_name, entry->d_name);
                     strcat(files_list, row);  // Append the row to the file_list
@@ -400,8 +400,6 @@ bool sendPage(int connfd, char *filename, int dynamic) {
             }
             // Calculate the lengths
             size_t prefix_len = video_placeholder - file_content;
-            size_t video_name_len = strlen(filename);
-            size_t mpd_path_len;
 
             size_t mpd_url_size = strlen("/api/video/") + strlen(filename) + strlen("/dash.mpd") + 3; // 2 quotes + null terminator
             char *mpd_path = (char *)malloc(mpd_url_size);
@@ -419,10 +417,6 @@ bool sendPage(int connfd, char *filename, int dynamic) {
                 send(connfd, ERROR404, strlen(ERROR404), 0);
                 return false;
             }
-
-            // Calculate the lengths
-            size_t prefix_len_final = mpd_placeholder - file_content;
-            size_t mpd_url_encoded_len = strlen(mpd_path); // Assuming no special encoding needed
 
             // Start constructing final_content
             // Copy content before <?VIDEO_NAME?>
