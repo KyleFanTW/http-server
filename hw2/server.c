@@ -16,7 +16,7 @@
 #include <signal.h>
 
 
-#define MAX_CONNECTIONS 100
+#define MAX_CONNECTIONS 120
 #define PORT 8081
 #define ERR_EXIT(a) { perror(a); exit(1); }
 #define BUFFER_SIZE 16384
@@ -680,8 +680,14 @@ int main(int argc, char *argv[]) {
                     buffer[bytes_received] = '\0';
                     char *auth_header = strstr(buffer, "Authorization: ");
 
-                    if (!auth_header || !authenticate(auth_header)) auth = false;
-                    else auth = true;
+                    if (!auth_header || !authenticate(auth_header)) {
+                        auth = false;
+                        fprintf(stderr, "[MAIN - AUTH] Authentication failed\n");
+                    }
+                    else {
+                        auth = true;
+                        fprintf(stderr, "[MAIN - AUTH] Authentication successful\n");
+                    }
                 
                     char method[16], url[256];
                     char *request;
