@@ -26,7 +26,7 @@
 #define ERROR404 "HTTP/1.1 404 Not Found\r\nServer: CN2024Server/1.0\r\nContent-Type: text/plain\r\nContent-Length: 10\r\n\r\nNot Found\n"
 #define ERROR4051 "HTTP/1.1 405 Method Not Allowed\r\nServer: CN2024Server/1.0\r\nAllow: GET\r\nContent-Length: 0\r\n\r\n"
 #define ERROR4050 "HTTP/1.1 405 Method Not Allowed\r\nServer: CN2024Server/1.0\r\nAllow: POST\r\nContent-Length: 0\r\n\r\n"
-#define ERROR500 " HTTP/1.1 500 Internal Server Error\r\nServer: CN2024Server/1.0\r\nContent-Length: 0\r\n\r\n"
+#define ERROR500 "HTTP/1.1 500 Internal Server Error\r\nServer: CN2024Server/1.0\r\nContent-Length: 0\r\n\r\n"
 
 void *convert_video(void *arg);
 char* find_boundary(const char* haystack, size_t haystack_len, const char* needle, size_t needle_len);

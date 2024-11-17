@@ -205,8 +205,12 @@ int main(int argc, char *argv[]) {
     if (argc == 4) {
         // Check if the username and password are valid using secret.txt
         size_t encoded_length;
-        char *username_password = argv[3];
-        username_password[strlen(username_password)] = '\0';
+        char username_password[256];
+        strncpy(username_password, argv[3], sizeof(username_password) - 1);
+        username_password[sizeof(username_password) - 1] = '\0';
+        // Check if ':' is present and only once
+        
+
         //fprintf(stderr, "[MAIN - AUTH] Username:Password: %s\n", username_password);
         char *encoded = base64_encode((const unsigned char *)username_password, strlen(username_password), &encoded_length);
         if (encoded == NULL) {
@@ -219,11 +223,11 @@ int main(int argc, char *argv[]) {
         //Try to authenticate with the server
         snprintf(buffer, sizeof(buffer), "GET /upload/file HTTP/1.1\r\n"
                                          "Host: %s:%s\r\n"
+                                         "User-Agent: CN2024Client/1.0\r\n"
                                          "Connection: keep-alive\r\n"
                                          "Content-Length: 0\r\n"
                                          "%s\r\n"
-                                         "User-Agent: CN2024Client/1.0\r\n"
-                                         "\r\n\r\n",
+                                         "\r\n",
                      argv[1], argv[2], auth_header);
 
         send_http_request(sockfd, buffer);
@@ -305,11 +309,11 @@ int main(int argc, char *argv[]) {
 
                 snprintf(buffer, sizeof(buffer), "POST /api/file HTTP/1.1\r\n"
                                             "Host: %s:%s\r\n"
+                                            "User-Agent: CN2024Client/1.0\r\n"
                                             "Connection: keep-alive\r\n"
                                             "Content-Length: %d\r\n"
                                             "%s\r\n"
                                             "%s\r\n"
-                                            "User-Agent: CN2024Client/1.0\r\n"
                                             "\r\n"
                                             "--%s\r\n"
                                             "Content-Disposition: form-data; name=\"upfile\"; filename=\"%s\"\r\n"
@@ -372,14 +376,14 @@ int main(int argc, char *argv[]) {
 
                 snprintf(buffer, sizeof(buffer), "POST /api/video HTTP/1.1\r\n"
                                             "Host: %s:%s\r\n"
+                                            "User-Agent: CN2024Client/1.0\r\n"
                                             "Connection: keep-alive\r\n"
                                             "Content-Length: %d\r\n"
                                             "%s\r\n"
                                             "%s\r\n"
-                                            "User-Agent: CN2024Client/1.0\r\n"
                                             "\r\n"
                                             "--%s\r\n"
-                                            "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n"
+                                            "Content-Disposition: form-data; name=\"upfile\"; filename=\"%s\"\r\n"
                                             "\r\n",
                         argv[1], argv[2], fullContentLength, auth ? auth_header : "", boundaryheader, boundary, filename);
                 // fprintf(stderr, "Request: %s\n", buffer);
@@ -407,9 +411,9 @@ int main(int argc, char *argv[]) {
 
                 snprintf(buffer, sizeof(buffer), "GET /api/file/%s HTTP/1.1\r\n"
                                             "Host: %s:%s\r\n"
+                                            "User-Agent: CN2024Client/1.0\r\n"
                                             "Connection: keep-alive\r\n"
                                             "%s\r\n"
-                                            "User-Agent: CN2024Client/1.0\r\n"
                                             "\r\n",
                         encoded_filename, argv[1], argv[2], auth ? auth_header : "");
                 send_http_request(sockfd, buffer);
