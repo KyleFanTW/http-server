@@ -260,6 +260,11 @@ bool authenticate(const char *auth_header) {
     }
     free(decoded_bytes);
     FILE *file = fopen("./secret", "r");
+    if (!file) {
+        // send 500
+        fprintf(stderr, "[AUTH] Failed to open secret file\n");
+        return false;
+    }
     fprintf(stderr, "[AUTH] Opened secret file\n");
     char line[64];
     while (fgets(line, sizeof(line), file)) {
@@ -758,7 +763,7 @@ int main(int argc, char *argv[]) {
                     } 
                     else if (strstr(url, "/api") != NULL) {
                         if (strstr(url, "/api/file") != NULL) {
-                            if (strstr(url, "/api/file/") == NULL) {
+                            if (strcmp(url, "/api/file") == 0) {
                                 //upload file
                                 if (strstr(method, "POST") == NULL || strstr(buffer, "Content-Type: multipart/form-data") == NULL) {
                                     send(connfd, ERROR4050, strlen(ERROR4050), 0);
@@ -783,7 +788,7 @@ int main(int argc, char *argv[]) {
                                 free(request);
                                 
                             } 
-                            else {
+                            else if (strstr(url, "/api/file/") != NULL) {
                                 //provide file
                                 if (strstr(method, "GET") == NULL) {
                                     send(connfd, ERROR4051, strlen(ERROR4051), 0);
@@ -792,9 +797,13 @@ int main(int argc, char *argv[]) {
                                 }
                                 downloader(buffer, connfd, 0);
                             }
+                            else {
+                                send(connfd, ERROR404, strlen(ERROR404), 0);
+                                fprintf(stderr, "[MAIN - API Misc] Send 404 due to file not found for %s\n", url);
+                            }
                             
                         } else if (strstr(url, "/api/video") != NULL) {
-                            if (strstr(url, "/api/video/") == NULL) {
+                            if (strcmp(url, "/api/video") == 0) {
                                 fprintf(stderr, "[MAIN - Vid Uploads] Request: %s\n", buffer);
                                 //upload file
                                 if (strstr(method, "POST") == NULL || strstr(buffer, "Content-Type: multipart/form-data") == NULL) {
@@ -820,7 +829,7 @@ int main(int argc, char *argv[]) {
                                 free(request);
                                 
                             } 
-                            else {
+                            else if (strstr(url, "/api/video/") != NULL) {
                                 //provide file
                                 if (strstr(method, "GET") == NULL) {
                                     send(connfd, ERROR4051, strlen(ERROR4051), 0);
@@ -829,26 +838,41 @@ int main(int argc, char *argv[]) {
                                 }
                                 downloader(buffer, connfd, 1);
                             }
+                            else {
+                                send(connfd, ERROR404, strlen(ERROR404), 0);
+                                fprintf(stderr, "[MAIN - API Misc] Send 404 due to file not found for %s\n", url);
+                            }
                         } else {
                             send(connfd, ERROR404, strlen(ERROR404), 0);
                             fprintf(stderr, "[MAIN - API Misc] Send 404 due to file not found for %s\n", url);
                         }
                     } 
                     else if (strstr(url, "/upload/") != NULL) {
-                        if (strcmp(method, "GET") != 0) {
-                            send(connfd, ERROR4051, strlen(ERROR4051), 0);
-                            fprintf(stderr, "[MAIN - Uploader] Send 405 Method Not Allowed for /upload/file, it should be GET\n");
-                            continue;
-                        }
-                        if (auth == false) {
-                            send(connfd, ERROR401, strlen(ERROR401), 0);
-                            fprintf(stderr, "[MAIN - Uploader] Send 401 Unauthorized for /upload/file\n");
-                            continue;
-                        }
-                        if (strstr(url, "video") != NULL){
+                        // check if the endpoint is defined, it must strictly be /upload/file or /upload/video
+                        if (strcmp(url, "/upload/video") == 0) {
+                                if (strcmp(method, "GET") != 0) {
+                                send(connfd, ERROR4051, strlen(ERROR4051), 0);
+                                fprintf(stderr, "[MAIN - Uploader] Send 405 Method Not Allowed for /upload/video, it should be GET\n");
+                                continue;
+                            }
+                            if (auth == false) {
+                                send(connfd, ERROR401, strlen(ERROR401), 0);
+                                fprintf(stderr, "[MAIN - Uploader] Send 401 Unauthorized for /upload/video\n");
+                                continue;
+                            }
                             sendPage(connfd, "./web/uploadv.html", 0);
                         }
-                        else if (strstr(url, "file") != NULL){
+                        else if (strcmp(url, "/upload/file") == 0) {
+                            if (strcmp(method, "GET") != 0) {
+                                send(connfd, ERROR4051, strlen(ERROR4051), 0);
+                                fprintf(stderr, "[MAIN - Uploader] Send 405 Method Not Allowed for /upload/file, it should be GET\n");
+                                continue;
+                            }
+                            if (auth == false) {
+                                send(connfd, ERROR401, strlen(ERROR401), 0);
+                                fprintf(stderr, "[MAIN - Uploader] Send 401 Unauthorized for /upload/file or video\n");
+                                continue;
+                            }
                             sendPage(connfd, "./web/uploadf.html", 0);
                         }
                         else {
