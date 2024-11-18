@@ -492,11 +492,11 @@ bool downloader(char *buffer, int connfd, int video) {
     strncpy(tmpfilename, filename_start, filename_end - filename_start);
     tmpfilename[filename_end - filename_start] = '\0';
     char *filename = url_decode(tmpfilename);
-    fprintf(stderr, "[DL] Requested file: %s\n", filename);
+    fprintf(stderr, "[DL] Requested file: .%s.\n", filename);
     //open the file
     char file_path[256];
-    // sanitize the filename, if it contains ".." then return 404
-    if (strstr(filename, "..") != NULL) {
+    // sanitize the filename, if it contains ".." or the filename is empty, return 404
+    if ((strstr(filename, "..") != NULL) || (strlen(filename) == 0)) {
         send(connfd, ERROR404, strlen(ERROR404), 0);
         fprintf(stderr, "[DL] Send 404 due to file not found for /api/file or video/%s\n", filename);
         return false;
@@ -895,10 +895,7 @@ int main(int argc, char *argv[]) {
                     }
                     else {
                         //pass if favicon.ico for now :/
-                        if (strcmp(url, "/favicon.ico") == 0) {
-                            fprintf(stderr, "[MAIN - Misc] Requested favicon.ico\n");
-                            //continue;
-                        }
+                        
                         send(connfd, ERROR404, strlen(ERROR404), 0);
                         fprintf(stderr, "[MAIN - Misc] Send 404 Not Found for unknown request\n");
                         //fprintf(stderr, "[MAIN - Misc] Unknown request: %s\n", url);
