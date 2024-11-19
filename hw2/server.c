@@ -16,6 +16,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <ctype.h> 
 
 
 #define MAX_CONNECTIONS 140

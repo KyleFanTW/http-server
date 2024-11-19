@@ -10,6 +10,7 @@
 #include<signal.h>
 #include<sys/types.h>
 #include<sys/stat.h>
+#include <ctype.h> 
 
 #include"utils/base64.h"
 
