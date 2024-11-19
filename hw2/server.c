@@ -19,7 +19,7 @@
 #include <ctype.h> 
 
 
-#define MAX_CONNECTIONS 140
+#define MAX_CONNECTIONS 300
 #define ERR_EXIT(a) { perror(a); exit(1); }
 #define BUFFER_SIZE 16384
 
