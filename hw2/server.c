@@ -14,6 +14,8 @@
 #include <poll.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <sys/wait.h>
+#include <errno.h>
 
 
 #define MAX_CONNECTIONS 120
@@ -28,15 +30,6 @@
 #define ERROR4050 "HTTP/1.1 405 Method Not Allowed\r\nServer: CN2024Server/1.0\r\nAllow: POST\r\nContent-Length: 0\r\n\r\n"
 #define ERROR500 "HTTP/1.1 500 Internal Server Error\r\nServer: CN2024Server/1.0\r\nContent-Length: 0\r\n\r\n"
 
-void *convert_video(void *arg);
-char* find_boundary(const char* haystack, size_t haystack_len, const char* needle, size_t needle_len);
-bool parseData(char *buffer, int buffer_length, int connfd, int video);
-bool should_keep_alive(const char *request);
-char *url_encode(const char *str);
-char *url_decode(const char *str);
-bool authenticate(const char *auth_header);
-bool sendPage(int connfd, char *filename, int dynamic);
-bool downloader(char *buffer, int connfd, int video);
 
 
 /*
@@ -61,6 +54,12 @@ void *convert_video(void *arg) {
     }
     char video_path[256];
     snprintf(video_path, sizeof(video_path), "./web/videos/%s", video_name);
+    //remove the directory if it exists
+    if (stat(video_path, &st) == 0) {
+        char rm_command[264];
+        snprintf(rm_command, sizeof(rm_command), "rm -rf %s", video_path);
+        system(rm_command);
+    }
     if (stat(video_path, &st) == -1) {
         mkdir(video_path, 0700);
     }
@@ -73,7 +72,10 @@ void *convert_video(void *arg) {
         "-adaptation_sets \"id=0,streams=v id=1,streams=a\" -f dash "
         "\"./web/videos/%s/dash.mpd\"", 
         video_name, video_name);
+    fprintf(stderr, "[CONVERTER] Running command: %s\n", command);
     system(command);
+    fprintf(stderr, "[CONVERTER] Video converted: %s\n", video_name);
+    free(video_name);
     return NULL;
 }
 
@@ -90,7 +92,6 @@ char* find_boundary(const char* haystack, size_t haystack_len, const char* needl
     }
     return NULL;
 }
-
 
 bool parseData(char *buffer, int buffer_length, int connfd, int video) {
     // Find the boundary
@@ -172,9 +173,12 @@ bool parseData(char *buffer, int buffer_length, int connfd, int video) {
     fprintf(stderr, "[PARSER] File written\n");
     if (video == 1) {
         pthread_t tid;
-        //strip off the .mp4
-        filename[strlen(filename) - 4] = '\0';
-        pthread_create(&tid, NULL, convert_video, (void *)filename);
+        if (strstr(filename, ".mp4") != NULL) {
+            filename[strlen(filename) - 4] = '\0';
+        }
+        char *filename_copy = (char *)malloc(strlen(filename) + 1);
+        strcpy(filename_copy, filename);
+        pthread_create(&tid, NULL, convert_video, (void *)filename_copy);
         pthread_detach(tid);
     }
     fprintf(stderr, "[PARSER] File saved to %s\n", file_path);
@@ -182,15 +186,6 @@ bool parseData(char *buffer, int buffer_length, int connfd, int video) {
 }
 
 
-bool should_keep_alive(const char *request) {
-    const char *connection_header = strstr(request, "Connection: ");
-    if (connection_header) {
-        connection_header += strlen("Connection: ");
-        if (strncasecmp(connection_header, "keep-alive", 10) == 0) return true;
-        if (strncasecmp(connection_header, "close", 5) == 0) return false;
-    }
-    return true;
-}
 
 
 char *url_encode(const char *str) {
@@ -229,12 +224,10 @@ char *url_decode(const char *str) {
 }
 
 
-bool authenticate(const char *auth_header) {
-    fprintf(stderr, "[AUTH] Auth header: %s\n", auth_header);
-    if (!auth_header) return false;
-    char encoded[512];
-    sscanf(auth_header, "Authorization: Basic %s", encoded);
+
+bool authenticate(char *encoded){
     //check correct base64 encoding
+    fprintf(stderr, "[AUTH] Authenticating for %s\n", encoded);
     for (int i = 0; i < strlen(encoded); i++) {
         if (!((encoded[i] >= 'A' && encoded[i] <= 'Z') || (encoded[i] >= 'a' && encoded[i] <= 'z') || (encoded[i] >= '0' && encoded[i] <= '9') || encoded[i] == '+' || encoded[i] == '/' || encoded[i] == '=')) {
             return false;
@@ -488,14 +481,12 @@ bool sendPage(int connfd, char *filename, int dynamic) {
     return false;
 }
 
-bool downloader(char *buffer, int connfd, int video) {
+bool downloader(char *url, int connfd, int video) {
     //get the filename
     
-    char *filename_start = (video == 0) ? strstr(buffer, "/api/file/") + strlen("/api/file/") : strstr(buffer, "/api/video/") + strlen("/api/video/");
-    char *filename_end = strchr(filename_start, ' ');
-    char tmpfilename[128];
-    strncpy(tmpfilename, filename_start, filename_end - filename_start);
-    tmpfilename[filename_end - filename_start] = '\0';
+    char *tmpfilename = (video == 0) ? strstr(url, "/api/file/") + strlen("/api/file/") : strstr(url, "/api/video/") + strlen("/api/video/");
+    // parse the filename from the URL
+
     char *filename = url_decode(tmpfilename);
     fprintf(stderr, "[DL] Requested file: .%s.\n", filename);
     //open the file
@@ -624,6 +615,9 @@ int main(int argc, char *argv[]) {
     if (stat("./web/videos", &st) == -1) {
         mkdir("./web/videos", 0700);
     }
+    if (stat("./web/tmp", &st) == -1) {
+        mkdir("./web/tmp", 0700);
+    }
 
 
     while (1) {
@@ -663,276 +657,345 @@ int main(int argc, char *argv[]) {
                 bool keep_alive = true;
                 bool auth = false;
 
+                
                 if (bytes_received <= 0) {
-                    
                     // Client disconnected or error occurred
                     fprintf(stderr, "[MAIN - CON] Client disconnected or error occurred on connfd %d\n", poll_fds[i].fd);
                     close(poll_fds[i].fd);
                     poll_fds[i] = poll_fds[nfds - 1];  // Remove from poll set
                     nfds--;
                     i--;  // Process the new entry at index i
-                } else {
-                    buffer[bytes_received] = '\0';
-                    keep_alive = should_keep_alive(buffer);
-                    fprintf(stderr, "[MAIN - CON] Checked and found connfd %d request is keep-alive: %d\n", poll_fds[i].fd, keep_alive);
-                    
-                    if (bytes_received < 0) {
-                        ERR_EXIT("recv()");
-                    }
-                    //printf("Received request at connfd %d\n", connfd);
-                    //fprintf(stderr, "Received request: %s\n", buffer);
+                    continue;
+                }
 
-                    buffer[bytes_received] = '\0';
-                    char *auth_header = strstr(buffer, "Authorization: ");
+                buffer[bytes_received] = '\0';
+                fprintf(stderr, "[MAIN - REQ] Received request: %s\n", buffer);
 
-                    if (!auth_header || !authenticate(auth_header)) {
-                        auth = false;
-                        fprintf(stderr, "[MAIN - AUTH] Authentication failed\n");
-                    }
-                    else {
-                        auth = true;
-                        fprintf(stderr, "[MAIN - AUTH] Authentication successful\n");
-                    }
+                // for each line, parse the headers with a loop
+                char auth_prefix[] = "Authorization: Basic ";
+                char typeprefix[] = "Content-Type: ";
+                char lengthprefix[] = "Content-Length: ";
+                char boundaryprefix[] = "boundary=";
+                char conprefix[] = "Connection: ";
+
+
+                char encoded[256];
+                char type[64] = "";
+                int content_length = 0;
+                char boundary[256];
+
+                char method[16], url[256];
+                char *request;
+                sscanf(buffer, "%s %s", method, url);
+
+                fprintf(stderr, "[MAIN - REQ PARSE] URL: .%s.\n", url);
+                fprintf(stderr, "[MAIN - REQ PARSE] Method: .%s.\n", method);
+
+                //divide the request by \r\n\r\n
+                //copy the first part of the buffer to a new buffer, header
+                char *header;
+                char *header_end = strstr(buffer, "\r\n\r\n");
+                if (header_end) {
+                    // Calculate the length of the headers
+                    size_t header_length = header_end - buffer + 4; // +4 to include the "\r\n\r\n"
                 
-                    char method[16], url[256];
-                    char *request;
-                    sscanf(buffer, "%s %s", method, url);
-                    fprintf(stderr, "[MAIN - REQ PARSE] URL: .%s.\n", url);
-                    fprintf(stderr, "[MAIN - REQ PARSE] Method: .%s.\n", method);
-
-
-                    int content_length = 0;
+                    // Allocate memory for the header buffer
+                    header = (char *)malloc(header_length + 1); // +1 for null terminator
                     
-                    //find the boundary
-                    char boundary[256];
-                    if (strstr(buffer, "Content-Type: multipart/form-data") == NULL) {
-                        fprintf(stderr, "[MAIN - Full Req] No file upload\n");
+                    if (header) {
+                        // Copy the headers to the new buffer
+                        strncpy(header, buffer, header_length);
+                        header[header_length] = '\0'; // Null-terminate the header buffer
+                
+                        fprintf(stderr, "Headers:\n%s\n", header);
+                    } else {
+                        fprintf(stderr, "Failed to allocate memory for headers\n");
+                    }
+                } else {
+                    fprintf(stderr, "Failed to find end of headers\n");
+                }
+                
+
+                char *line = strtok(header, "\r\n");
+
+                while (line != NULL) {
+                    // if \r\n\r\n is found, break
+                    if (strstr(line, "\r\n\r\n") != NULL) {
+                        break;
+                    }
+                    if (strncasecmp(line, auth_prefix, strlen(auth_prefix)) == 0) {
+                        sscanf(line + strlen(auth_prefix), "%255s", encoded);
+                        auth = authenticate(encoded);
+                        fprintf(stderr, "[MAIN - AUTH] Authentication %s\n", auth ? "succeeded" : "failed");
+                    }
+                    // Parse Content-Type header
+                    else if (strncasecmp(line, typeprefix, strlen(typeprefix)) == 0) {
+                        sscanf(line + strlen(typeprefix), "%63s", type);
+                        // strip off the trailing ;
+                        char *semicolon = strchr(type, ';');
+                        if (semicolon) {
+                            *semicolon = '\0';
+                        }
+                        fprintf(stderr, "[MAIN - REQ PARSE] Content-Type: %s\n", type);
+                        if (strcmp(type, "multipart/form-data") == 0) {
+                            char *boundary_start = strstr(line, boundaryprefix);
+                            if (!boundary_start) {
+                                fprintf(stderr, "[MAIN - REQ PARSE] Failed to find boundary\n");
+                                continue;
+                            }
+                            strncpy(boundary, boundary_start + strlen(boundaryprefix), sizeof(boundary));
+                            boundary[strcspn(boundary, "\r\n")] = '\0';
+                            fprintf(stderr, "[MAIN - REQ PARSE] Boundary: %s\n", boundary);
+                        }
+
+                    }
+                    else if (strncasecmp(line, lengthprefix, strlen(lengthprefix)) == 0) {
+                        sscanf(line + strlen(lengthprefix), "%d", &content_length);
+                        fprintf(stderr, "[MAIN - REQ PARSE] Content-Length: %d\n", content_length);
+                    }
+                    else if (strncasecmp(line, conprefix, strlen(conprefix)) == 0) {
+                        const char *connection_header = line + strlen(conprefix);
+                        if (strncasecmp(connection_header, "keep-alive", 10) == 0) keep_alive = true;
+                        if (strncasecmp(connection_header, "close", 5) == 0) keep_alive = false;
+                        fprintf(stderr, "[MAIN - CON] Checked and found connfd %d request is keep-alive: %d\n", poll_fds[i].fd, keep_alive);
                     }
                     else {
-                        sscanf(strstr(buffer, "Content-Length: ") + strlen("Content-Length: "), "%d", &content_length);
-                        fprintf(stderr, "[MAIN - Full Req] Content-Length: %d\n", content_length);
-                        char *boundary_start = strstr(buffer, "boundary=") + strlen("boundary=");
-                        char *boundary_end = strchr(boundary_start, '\r');
-                        strncpy(boundary, boundary_start, boundary_end - boundary_start);
-                        boundary[boundary_end - boundary_start] = '\0';
-                        fprintf(stderr, "[MAIN - Full Req] Boundary: %s\n", boundary);
-                        //malloc a binary buffer to store the whole request
-                        request = (char *)malloc(content_length + 1);
-                        fprintf(stderr, "[MAIN - Full Req] Setting up request buffer\n");
-                        int total_received = 0;
-                        //find the start of the file content
-                        char *file_content_start = strstr(buffer, "\r\n\r\n");
-                        fprintf(stderr, "[MAIN - Full Req] File content start is located\n");
-                        fprintf(stderr, "[MAIN - Full Req] File content start: %s\n", file_content_start);
-                        if (file_content_start) {
-                            file_content_start += 4; // Move past "\r\n\r\n"
-                            int file_content_length = bytes_received - (file_content_start - buffer);
-                            fprintf(stderr, "[MAIN - Full Req] File content length: %d\n", file_content_length);
-                            memcpy(request, file_content_start, file_content_length);
-                            total_received += file_content_length;
-                        }
-                        
-                        
-                        while (total_received < content_length) {
-                            int bytes_to_read = content_length - total_received;
-                            fprintf(stderr, "[MAIN - Full Req] Bytes to read: %d\n", bytes_to_read);
-                            int received = recv(connfd, request + total_received, bytes_to_read, 0);
-                            if (received <= 0) {
-                                perror("recv failed");
-                                free(request);
-                                return false;
-                            }
-                            total_received += received;
-                        }
-                        fprintf(stderr, "[MAIN - Full Req] Parsing request buffer\n");
-                        fprintf(stderr, "[MAIN - Full Req] ===DATA========\n%s\n============\n", request);
+                        fprintf(stderr, "[MAIN - REQ PARSE] Ignoring header: %s\n", line);
                     }
+
+                    line = strtok(NULL, "\r\n");
+                }
+
+                
+                    
+                    
+                    
+                if (strcmp(type, "multipart/form-data") != 0) {
+                    fprintf(stderr, "[MAIN - Full Req] No file upload\n");
+                }
+                else {
+                    fprintf(stderr, "[MAIN - Full Req] Content-Length: %d\n", content_length);
+                    fprintf(stderr, "[MAIN - Full Req] Boundary: %s\n", boundary);
+                        //malloc a binary buffer to store the whole request
+
+                    int total_received = 0;
+                    request = (char *)malloc(content_length + 10);
+                    //copy the rest of the buffer ie after the first \r\n\r\n to the request buffer, if there are any
+                    char *start = strstr(buffer, "\r\n\r\n");
+                    if (start != NULL) {
+                        start += 4;
+                        int start_len = buffer + bytes_received - start;
+                        memcpy(request, start, start_len);
+                        total_received += start_len;
+                    }
+
+
+
+                    fprintf(stderr, "[MAIN - Full Req] Setting up request buffer\n");
+                    
+
+                    while (total_received < content_length) {
+                        int bytes_to_read = content_length - total_received;
+                        int received = recv(connfd, request + total_received, bytes_to_read, 0);
+                        if (received <= 0) {
+                            perror("recv failed");
+                            free(request);
+                            return false;
+                        }
+                        total_received += received;
+                        fprintf(stderr, "[UPLOAD] Received %d bytes (%d/%d).\n", received, total_received, content_length);
+                        // print first 1000 bytes of the request
+                            
+                    }
+                    fprintf(stderr, "[MAIN - Full Req] Parsing request buffer\n");
+                    fprintf(stderr, "[MAIN - Full Req] ===DATA========\n%s\n============\n", request);
+                }
 
                     
                     
                     
                 
                     // Check if the request is for "/"
-                    if (strcmp(url, "/") == 0) {
-                        if (strcmp(method, "GET") != 0) {
-                            send(connfd, ERROR4051, strlen(ERROR4051), 0);
-                            fprintf(stderr, "[MAIN - /] Send 405 Method Not Allowed for /, it should be GET\n");
-                            continue;
-                        }
-                        sendPage(connfd, "./web/index.html", 0);
-                    } 
-                    else if (strstr(url, "/api") != NULL) {
-                        if (strstr(url, "/api/file") != NULL) {
-                            if (strcmp(url, "/api/file") == 0) {
-                                //upload file
-                                if (strstr(method, "POST") == NULL || strstr(buffer, "Content-Type: multipart/form-data") == NULL) {
-                                    send(connfd, ERROR4050, strlen(ERROR4050), 0);
-                                    fprintf(stderr, "[MAIN - File Uploads] Send 405 Method Not Allowed for /api/file, it should be POST\n");
-                                    continue;
-                                }
-                                if (auth == false) {
-                                    send(connfd, ERROR401, strlen(ERROR401), 0);
-                                    fprintf(stderr, "[MAIN - File Uploads] Send 401 Unauthorized for /api/file\n");
-                                    continue;
-                                }
-                                
-                                if (parseData(request, content_length, connfd, 0)) {
-                                    fprintf(stderr, "[MAIN - File Uploads] File uploaded successfully\n");
-                                    //response 200 OK
-                                    char response[79] = "HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\nContent-Length: 14\r\n\r\nFile uploaded\n";
-                                    send(connfd, response, strlen(response), 0);
-                                } else {
-                                    fprintf(stderr, "[MAIN - File Uploads] 500 File upload failed\n");
-                                    send(connfd, ERROR500, strlen(ERROR500), 0);
-                                }
-                                free(request);
-                                
-                            } 
-                            else if (strstr(url, "/api/file/") != NULL) {
-                                //provide file
-                                if (strstr(method, "GET") == NULL) {
-                                    send(connfd, ERROR4051, strlen(ERROR4051), 0);
-                                    fprintf(stderr, "[MAIN - File Serve] Send 405 Method Not Allowed for /api/file/<filename>, it should be GET\n");
-                                    continue;
-                                }
-                                downloader(buffer, connfd, 0);
+                if (strcmp(url, "/") == 0) {
+                    if (strcmp(method, "GET") != 0) {
+                        send(connfd, ERROR4051, strlen(ERROR4051), 0);
+                        fprintf(stderr, "[MAIN - /] Send 405 Method Not Allowed for /, it should be GET\n");
+                        continue;
+                    }
+                    sendPage(connfd, "./web/index.html", 0);
+                } 
+                else if (strstr(url, "/api") != NULL) {
+                    if (strstr(url, "/api/file") != NULL) {
+                        if (strcmp(url, "/api/file") == 0) {
+                            //upload file
+                            if (strstr(method, "POST") == NULL || strcmp(type, "multipart/form-data") != 0) {
+                                send(connfd, ERROR4050, strlen(ERROR4050), 0);
+                                fprintf(stderr, "[MAIN - File Uploads] Send 405 Method Not Allowed for /api/file, it should be POST\n");
+                                continue;
                             }
-                            else {
-                                send(connfd, ERROR404, strlen(ERROR404), 0);
-                                fprintf(stderr, "[MAIN - API Misc] Send 404 due to file not found for %s\n", url);
+                            if (auth == false) {
+                                send(connfd, ERROR401, strlen(ERROR401), 0);
+                                fprintf(stderr, "[MAIN - File Uploads] Send 401 Unauthorized for /api/file\n");
+                                continue;
                             }
                             
-                        } else if (strstr(url, "/api/video") != NULL) {
-                            if (strcmp(url, "/api/video") == 0) {
-                                fprintf(stderr, "[MAIN - Vid Uploads] Request: %s\n", buffer);
-                                //upload file
-                                if (strstr(method, "POST") == NULL || strstr(buffer, "Content-Type: multipart/form-data") == NULL) {
-                                    send(connfd, ERROR4050, strlen(ERROR4050), 0);
-                                    fprintf(stderr, "[MAIN - Vid Uploads] Send 405 Method Not Allowed for /api/video, it should be POST\n");
-                                    continue;
-                                }
-                                if (auth == false) {
-                                    send(connfd, ERROR401, strlen(ERROR401), 0);
-                                    fprintf(stderr, "[MAIN - Vid Uploads] Send 401 Unauthorized for /api/video\n");
-                                    continue;
-                                }
-                                
-                                if (parseData(request, content_length, connfd, 1)) {
-                                    fprintf(stderr, "[MAIN - Vid Uploads] File uploaded successfully\n");
-                                    //response 200 OK
-                                    char response[79] = "HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\nContent-Length: 14\r\n\r\nFile uploaded\n";
-                                    send(connfd, response, strlen(response), 0);
-                                } else {
-                                    fprintf(stderr, "[MAIN - Vid Uploads] 500 File upload failed\n");
-                                    send(connfd, ERROR500, strlen(ERROR500), 0);
-                                }
-                                free(request);
-                                
-                            } 
-                            else if (strstr(url, "/api/video/") != NULL) {
-                                //provide file
-                                if (strstr(method, "GET") == NULL) {
-                                    send(connfd, ERROR4051, strlen(ERROR4051), 0);
-                                    fprintf(stderr, "[MAIN - Vid Serve] Send 405 Method Not Allowed for /api/video/<filename>, it should be GET\n");
-                                    continue;
-                                }
-                                downloader(buffer, connfd, 1);
+                            if (parseData(request, content_length, connfd, 0)) {
+                                fprintf(stderr, "[MAIN - File Uploads] File uploaded successfully\n");
+                                //response 200 OK
+                                char response[105] = "HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\nContent-Type: text/plain\r\nContent-Length: 14\r\n\r\nFile uploaded\n";
+                                send(connfd, response, strlen(response), 0);
+                            } else {
+                                fprintf(stderr, "[MAIN - File Uploads] 500 File upload failed\n");
+                                send(connfd, ERROR500, strlen(ERROR500), 0);
                             }
-                            else {
-                                send(connfd, ERROR404, strlen(ERROR404), 0);
-                                fprintf(stderr, "[MAIN - API Misc] Send 404 due to file not found for %s\n", url);
+                            free(request);
+                            
+                        } 
+                        else if (strstr(url, "/api/file/") != NULL) {
+                            //provide file
+                            if (strstr(method, "GET") == NULL) {
+                                send(connfd, ERROR4051, strlen(ERROR4051), 0);
+                                fprintf(stderr, "[MAIN - File Serve] Send 405 Method Not Allowed for /api/file/<filename>, it should be GET\n");
+                                continue;
                             }
-                        } else {
+                            downloader(url, connfd, 0);
+                        }
+                        else {
                             send(connfd, ERROR404, strlen(ERROR404), 0);
                             fprintf(stderr, "[MAIN - API Misc] Send 404 due to file not found for %s\n", url);
                         }
-                    } 
-                    else if (strstr(url, "/upload/") != NULL) {
-                        // check if the endpoint is defined, it must strictly be /upload/file or /upload/video
-                        if (strcmp(url, "/upload/video") == 0) {
-                                if (strcmp(method, "GET") != 0) {
-                                send(connfd, ERROR4051, strlen(ERROR4051), 0);
-                                fprintf(stderr, "[MAIN - Uploader] Send 405 Method Not Allowed for /upload/video, it should be GET\n");
+                        
+                    } else if (strstr(url, "/api/video") != NULL) {
+                        if (strcmp(url, "/api/video") == 0) {
+                            fprintf(stderr, "[MAIN - Vid Uploads] Request: %s\n", buffer);
+                            //upload file
+                            if (strstr(method, "POST") == NULL || strcmp(type, "multipart/form-data") != 0) {
+                                send(connfd, ERROR4050, strlen(ERROR4050), 0);
+                                fprintf(stderr, "[MAIN - Vid Uploads] Send 405 Method Not Allowed for /api/video, it should be POST\n");
                                 continue;
                             }
                             if (auth == false) {
                                 send(connfd, ERROR401, strlen(ERROR401), 0);
-                                fprintf(stderr, "[MAIN - Uploader] Send 401 Unauthorized for /upload/video\n");
+                                fprintf(stderr, "[MAIN - Vid Uploads] Send 401 Unauthorized for /api/video\n");
                                 continue;
                             }
-                            sendPage(connfd, "./web/uploadv.html", 0);
-                        }
-                        else if (strcmp(url, "/upload/file") == 0) {
-                            if (strcmp(method, "GET") != 0) {
+                            
+                            if (parseData(request, content_length, connfd, 1)) {
+                                fprintf(stderr, "[MAIN - Vid Uploads] Video uploaded successfully\n");
+                                //response 200 OK
+                                char response[106] = "HTTP/1.1 200 OK\r\nServer: CN2024Server/1.0\r\nContent-Type: text/plain\r\nContent-Length: 14\r\n\r\nVideo uploaded\n";
+                                send(connfd, response, strlen(response), 0);
+                            } else {
+                                fprintf(stderr, "[MAIN - Vid Uploads] 500 File upload failed\n");
+                                send(connfd, ERROR500, strlen(ERROR500), 0);
+                            }
+                            free(request);
+                            
+                        } 
+                        else if (strstr(url, "/api/video/") != NULL) {
+                            //provide file
+                            if (strstr(method, "GET") == NULL) {
                                 send(connfd, ERROR4051, strlen(ERROR4051), 0);
-                                fprintf(stderr, "[MAIN - Uploader] Send 405 Method Not Allowed for /upload/file, it should be GET\n");
+                                fprintf(stderr, "[MAIN - Vid Serve] Send 405 Method Not Allowed for /api/video/<filename>, it should be GET\n");
                                 continue;
                             }
-                            if (auth == false) {
-                                send(connfd, ERROR401, strlen(ERROR401), 0);
-                                fprintf(stderr, "[MAIN - Uploader] Send 401 Unauthorized for /upload/file or video\n");
-                                continue;
-                            }
-                            sendPage(connfd, "./web/uploadf.html", 0);
+                            downloader(url, connfd, 1);
                         }
                         else {
                             send(connfd, ERROR404, strlen(ERROR404), 0);
-                            fprintf(stderr, "[MAIN - Uploader] Send 404 due to file not found for /upload/\n");
+                            fprintf(stderr, "[MAIN - API Misc] Send 404 due to file not found for %s\n", url);
                         }
+                    } else {
+                        send(connfd, ERROR404, strlen(ERROR404), 0);
+                        fprintf(stderr, "[MAIN - API Misc] Send 404 due to file not found for %s\n", url);
                     }
-                    else if (strcmp(url, "/file/") == 0){
-                        if (strcmp(method, "GET") != 0){
+                } 
+                else if (strstr(url, "/upload/") != NULL) {
+                    // check if the endpoint is defined, it must strictly be /upload/file or /upload/video
+                    if (strcmp(url, "/upload/video") == 0) {
+                            if (strcmp(method, "GET") != 0) {
                             send(connfd, ERROR4051, strlen(ERROR4051), 0);
-                            fprintf(stderr, "[MAIN - File List] Send 405 Method Not Allowed for /file/, it should be GET\n");
+                            fprintf(stderr, "[MAIN - Uploader] Send 405 Method Not Allowed for /upload/video, it should be GET\n");
                             continue;
                         }
-                        sendPage(connfd, "./web/listf.rhtml", 1);
+                        if (auth == false) {
+                            send(connfd, ERROR401, strlen(ERROR401), 0);
+                            fprintf(stderr, "[MAIN - Uploader] Send 401 Unauthorized for /upload/video\n");
+                            continue;
+                        }
+                        sendPage(connfd, "./web/uploadv.html", 0);
                     }
-                    else if (strstr(url, "/video/") != NULL) {
-                        if (strcmp(url, "/video/") == 0){
-                            if (strcmp(method, "GET") != 0){
-                                send(connfd, ERROR4051, strlen(ERROR4051), 0);
-                                fprintf(stderr, "[MAIN - Vid List] Send 405 Method Not Allowed for /video/, it should be GET\n");
-                                continue;
-                            }
-                            sendPage(connfd, "./web/listv.rhtml", 1);
+                    else if (strcmp(url, "/upload/file") == 0) {
+                        if (strcmp(method, "GET") != 0) {
+                            send(connfd, ERROR4051, strlen(ERROR4051), 0);
+                            fprintf(stderr, "[MAIN - Uploader] Send 405 Method Not Allowed for /upload/file, it should be GET\n");
+                            continue;
                         }
-                        else {
-                            if (strcmp(method, "GET") != 0) {
-                                send(connfd, ERROR4051, strlen(ERROR4051), 0);
-                                fprintf(stderr, "[MAIN - Vid Player] Send 405 Method Not Allowed for /video/<filename>, it should be GET\n");
-                                continue;
-                            }
-                            fprintf(stderr, "[MAIN - Vid Player] Requested video: %s\n", url);
-                            //parse the url
-                            char *filename_start = strstr(url, "/video/") + strlen("/video/");
-                            fprintf(stderr, "[MAIN - Vid Player] Filename: %s\n", filename_start);
-                            
-                            char tmpfilename[128];
-                            strncpy(tmpfilename, filename_start, strlen(filename_start));
-                            tmpfilename[strlen(filename_start)] = '\0';
-                            char *filename = url_decode(tmpfilename);
-                            fprintf(stderr, "[MAIN - Vid Player] Requested video: %s\n", filename);
-                            sendPage(connfd, filename, 2);
-                            free(filename);
+                        if (auth == false) {
+                            send(connfd, ERROR401, strlen(ERROR401), 0);
+                            fprintf(stderr, "[MAIN - Uploader] Send 401 Unauthorized for /upload/file or video\n");
+                            continue;
                         }
+                        sendPage(connfd, "./web/uploadf.html", 0);
                     }
                     else {
-                        //pass if favicon.ico for now :/
-                        
                         send(connfd, ERROR404, strlen(ERROR404), 0);
-                        fprintf(stderr, "[MAIN - Misc] Send 404 Not Found for unknown request\n");
-                        //fprintf(stderr, "[MAIN - Misc] Unknown request: %s\n", url);
-                    }
-
-                    if (!keep_alive) {
-                        fprintf(stderr, "[Main - CON] Closing connection: fd %d due to Connection: close\n", poll_fds[i].fd);
-                        close(poll_fds[i].fd);
-                        poll_fds[i] = poll_fds[nfds - 1];  // Remove from poll set
-                        nfds--;
-                        i--;  // Process the new entry at index i
+                        fprintf(stderr, "[MAIN - Uploader] Send 404 due to file not found for /upload/\n");
                     }
                 }
+                else if (strcmp(url, "/file/") == 0){
+                    if (strcmp(method, "GET") != 0){
+                        send(connfd, ERROR4051, strlen(ERROR4051), 0);
+                        fprintf(stderr, "[MAIN - File List] Send 405 Method Not Allowed for /file/, it should be GET\n");
+                        continue;
+                    }
+                    sendPage(connfd, "./web/listf.rhtml", 1);
+                }
+                else if (strstr(url, "/video/") != NULL) {
+                    if (strcmp(url, "/video/") == 0){
+                        if (strcmp(method, "GET") != 0){
+                            send(connfd, ERROR4051, strlen(ERROR4051), 0);
+                            fprintf(stderr, "[MAIN - Vid List] Send 405 Method Not Allowed for /video/, it should be GET\n");
+                            continue;
+                        }
+                        sendPage(connfd, "./web/listv.rhtml", 1);
+                    }
+                    else {
+                        if (strcmp(method, "GET") != 0) {
+                            send(connfd, ERROR4051, strlen(ERROR4051), 0);
+                            fprintf(stderr, "[MAIN - Vid Player] Send 405 Method Not Allowed for /video/<filename>, it should be GET\n");
+                            continue;
+                        }
+                        fprintf(stderr, "[MAIN - Vid Player] Requested video: %s\n", url);
+                        //parse the url
+                        char *filename_start = strstr(url, "/video/") + strlen("/video/");
+                        fprintf(stderr, "[MAIN - Vid Player] Filename: %s\n", filename_start);
+                        
+                        char tmpfilename[128];
+                        strncpy(tmpfilename, filename_start, strlen(filename_start));
+                        tmpfilename[strlen(filename_start)] = '\0';
+                        char *filename = url_decode(tmpfilename);
+                        fprintf(stderr, "[MAIN - Vid Player] Requested video: %s\n", filename);
+                        sendPage(connfd, filename, 2);
+                        free(filename);
+                    }
+                }
+                else {
+                    //pass if favicon.ico for now :/
+                    
+                    send(connfd, ERROR404, strlen(ERROR404), 0);
+                    fprintf(stderr, "[MAIN - Misc] Send 404 Not Found for unknown request\n");
+                    //fprintf(stderr, "[MAIN - Misc] Unknown request: %s\n", url);
+                }
+
+                if (!keep_alive) {
+                    fprintf(stderr, "[Main - CON] Closing connection: fd %d due to Connection: close\n", poll_fds[i].fd);
+                    close(poll_fds[i].fd);
+                    poll_fds[i] = poll_fds[nfds - 1];  // Remove from poll set
+                    nfds--;
+                    i--;  // Process the new entry at index i
+                }
+                
             }
         }
     }

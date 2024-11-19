@@ -258,18 +258,15 @@ int main(int argc, char *argv[]) {
         close(sockfd);
         sockfd = establish_connection(ip, atoi(argv[2]));
 
-        if (strcmp(buffer, "put") == 0) {
-            fprintf(stderr, "Usage: put [file]\n");
-        } else if (strcmp(buffer, "putv") == 0) {
-            fprintf(stderr, "Usage: putv [file]\n");
-        } else if (strcmp(buffer, "get") == 0) {
-            fprintf(stderr, "Usage: get [file]\n");
-        } 
+        char command[16];
+        char filename[256];
+        sscanf(buffer, "%s %[^\n]", command, filename);
+        
 
-        else if (strncmp(buffer, "put ", 4) == 0) {
-            char filename[128] = "";  // Initialize an empty filename
+
+        if (strcmp(command, "put") == 0) {
             
-            if (sscanf(buffer, "put %[^\n]", filename) != 1) {
+            if (strlen(filename) == 0) {
                 fprintf(stderr, "Usage: put [file]\n");
             } else {
                 
@@ -311,14 +308,14 @@ int main(int argc, char *argv[]) {
                                             "Host: %s:%s\r\n"
                                             "User-Agent: CN2024Client/1.0\r\n"
                                             "Connection: keep-alive\r\n"
-                                            "Content-Length: %d\r\n"
                                             "%s\r\n"
+                                            "Content-Length: %d\r\n"
                                             "%s\r\n"
                                             "\r\n"
                                             "--%s\r\n"
                                             "Content-Disposition: form-data; name=\"upfile\"; filename=\"%s\"\r\n"
                                             "\r\n",
-                        argv[1], argv[2], fullContentLength, auth ? auth_header : "", boundaryheader, boundary, filename);
+                        argv[1], argv[2], boundaryheader, fullContentLength, auth ? auth_header : "", boundary, filename);
                 // fprintf(stderr, "Request: %s\n", buffer);
                 send_http_request(sockfd, buffer);
                 send(sockfd, file_buffer, filesize, 0);
@@ -333,10 +330,8 @@ int main(int argc, char *argv[]) {
 
             }
 
-        } else if (strncmp(buffer, "putv ", 5) == 0) {
-            char filename[128] = "";  // Initialize an empty filename
-            
-            if (sscanf(buffer, "putv %[^\n]", filename) != 1) {
+        } else if (strcmp(buffer, "putv") == 0) {
+            if(strlen(filename) == 0) {
                 // No argument found after "put"
                 fprintf(stderr, "Usage: putv [file]\n");
             } else {
@@ -370,7 +365,7 @@ int main(int argc, char *argv[]) {
                 char boundaryheader[256];
                 snprintf(boundaryheader, sizeof(boundaryheader), "Content-Type: multipart/form-data; boundary=%s", boundary);
 
-                int fullContentLength = strlen(boundary) + 4 + strlen("Content-Disposition: form-data; name=\"file\"; filename=\"") + strlen(filename) + strlen("\"\r\n\r\n") + filesize + 2 + strlen(boundary) + 4;
+                int fullContentLength = strlen(boundary) + 4 + strlen("Content-Disposition: form-data; name=\"upfile\"; filename=\"") + strlen(filename) + strlen("\"\r\n\r\n") + filesize + 2 + strlen(boundary) + 6;
 
 
 
@@ -378,14 +373,14 @@ int main(int argc, char *argv[]) {
                                             "Host: %s:%s\r\n"
                                             "User-Agent: CN2024Client/1.0\r\n"
                                             "Connection: keep-alive\r\n"
-                                            "Content-Length: %d\r\n"
                                             "%s\r\n"
+                                            "Content-Length: %d\r\n"
                                             "%s\r\n"
                                             "\r\n"
                                             "--%s\r\n"
                                             "Content-Disposition: form-data; name=\"upfile\"; filename=\"%s\"\r\n"
                                             "\r\n",
-                        argv[1], argv[2], fullContentLength, auth ? auth_header : "", boundaryheader, boundary, filename);
+                        argv[1], argv[2], boundaryheader, fullContentLength, auth ? auth_header : "", boundary, filename);
                 // fprintf(stderr, "Request: %s\n", buffer);
                 send_http_request(sockfd, buffer);
                 send(sockfd, file_buffer, filesize, 0);
@@ -398,10 +393,8 @@ int main(int argc, char *argv[]) {
 
                 (receive_http_response(sockfd))? fprintf(stderr, "Command succeeded.\n") : fprintf(stderr, "Command failed.\n");
             }
-        } else if (strncmp(buffer, "get ", 4) == 0) {
-            char filename[128] = "";  // Initialize an empty filename
-            
-            if (sscanf(buffer, "get %[^\n]", filename) != 1) {
+        } else if (strcmp(buffer, "get") == 0) {
+            if (strlen(filename) == 0) {
                 // No argument found after "put"
                 fprintf(stderr, "Usage: get [file]\n");
             } else {
