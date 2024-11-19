@@ -258,8 +258,8 @@ int main(int argc, char *argv[]) {
         close(sockfd);
         sockfd = establish_connection(ip, atoi(argv[2]));
 
-        char command[16];
-        char filename[256];
+        char command[16] = {};
+        char filename[256] = {};
         sscanf(buffer, "%s %[^\n]", command, filename);
         
 
@@ -269,7 +269,7 @@ int main(int argc, char *argv[]) {
             if (strlen(filename) == 0) {
                 fprintf(stderr, "Usage: put [file]\n");
             } else {
-                
+                fprintf(stderr, "[PUT] Uploading file: .%s.\n", filename);
                 // fprintf(stderr, "[PUT] Uploading file: %s\n", filename);
                 FILE *file = fopen(filename, "rb");
                 if (!file) {

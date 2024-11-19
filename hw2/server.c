@@ -18,8 +18,7 @@
 #include <errno.h>
 
 
-#define MAX_CONNECTIONS 120
-#define PORT 8081
+#define MAX_CONNECTIONS 140
 #define ERR_EXIT(a) { perror(a); exit(1); }
 #define BUFFER_SIZE 16384
 
