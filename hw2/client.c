@@ -393,7 +393,7 @@ int main(int argc, char *argv[]) {
 
                 (receive_http_response(sockfd))? fprintf(stderr, "Command succeeded.\n") : fprintf(stderr, "Command failed.\n");
             }
-        } else if (strcmp(buffer, "get") == 0) {
+        } else if (strcmp(command, "get") == 0) {
             if (strlen(filename) == 0) {
                 // No argument found after "put"
                 fprintf(stderr, "Usage: get [file]\n");
