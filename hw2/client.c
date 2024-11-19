@@ -269,7 +269,7 @@ int main(int argc, char *argv[]) {
             if (strlen(filename) == 0) {
                 fprintf(stderr, "Usage: put [file]\n");
             } else {
-                fprintf(stderr, "[PUT] Uploading file: .%s.\n", filename);
+
                 // fprintf(stderr, "[PUT] Uploading file: %s\n", filename);
                 FILE *file = fopen(filename, "rb");
                 if (!file) {
